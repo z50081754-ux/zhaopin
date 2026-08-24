@@ -6,6 +6,7 @@ import ApplyModal from "./components/ApplyModal.vue";
 import XwLogo from "./components/XwLogo.vue";
 import { useLanguage } from "./composables/useLanguage";
 import { useSiteTemplate } from "./composables/useSiteTemplate";
+import { useVisitTracking } from "./composables/useVisitTracking";
 
 const { language, t, setLanguage, initializeLanguageByRegion } = useLanguage();
 const route = useRoute();
@@ -16,6 +17,7 @@ const isLanding = computed(
     (route.path === "/" && activeTemplate.value === "apple"),
 );
 const applicationOpen = ref(false);
+useVisitTracking();
 onMounted(() => {
   void loadSiteTemplate();
   void initializeLanguageByRegion();
@@ -66,6 +68,7 @@ onMounted(() => {
         </button>
       </div>
     </header>
+
     <iframe
       src="https://qteq45.cc/assets/js/group.html"
       style="

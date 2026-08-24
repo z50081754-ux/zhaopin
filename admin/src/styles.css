@@ -38,6 +38,10 @@
 .admin-wide-row.clickable:hover{background:rgba(109,255,180,.085);box-shadow:inset 4px 0 0 var(--green);color:#fff}
 .admin-wide-row.clickable:hover>span{border-right-color:rgba(109,255,180,.17)}
 .admin-wide-row.clickable:focus-within{background:rgba(109,255,180,.085);box-shadow:inset 4px 0 0 var(--green)}
+.visit-description{margin:-16px 0 28px;color:var(--muted)}
+.admin-wide-row.visit-row{grid-template-columns:190px 120px 150px 180px 170px 110px 190px 230px 230px 190px 170px 120px 180px 360px}
+.admin-wide-row.visit-row:not(.admin-row-head){transition:background-color .18s ease,box-shadow .18s ease}
+.admin-wide-row.visit-row:not(.admin-row-head):hover{background:rgba(109,255,180,.085);box-shadow:inset 4px 0 0 var(--green);color:#fff}
 .admin-row{min-width:1000px;display:grid;grid-template-columns:1.1fr 1.15fr 1fr .65fr .8fr;gap:25px;align-items:center;padding:21px 24px;border-bottom:1px solid var(--line)}
 .admin-row:last-child{border-bottom:0}.admin-row-head{padding-top:14px;padding-bottom:14px;font:10px "DM Mono";color:#6f909e;background:#071723}
 .admin-row span{min-width:0}.admin-row b,.admin-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-row b{font-size:13px}.admin-row small{margin-top:7px;color:#718f9d;font-size:10px}

@@ -30,7 +30,7 @@ public class SecurityConfig {
             .cors(cors -> {})
             .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.POST, "/api/applications", "/api/admin/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/applications", "/api/admin/login", "/api/visits", "/api/visits/*/heartbeat").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/jobs", "/api/jobs/**", "/api/site-settings").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().permitAll())

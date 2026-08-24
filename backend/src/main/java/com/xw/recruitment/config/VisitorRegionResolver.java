@@ -23,6 +23,22 @@ public class VisitorRegionResolver {
         return "LOCAL".equals(country) || SOUTHEAST_ASIA.contains(country);
     }
 
+    public String ipAddress(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && forwardedFor.contains(",")) {
+            forwardedFor = forwardedFor.substring(0, forwardedFor.indexOf(','));
+        }
+        String address = firstPresent(
+            request.getHeader("CF-Connecting-IP"),
+            forwardedFor,
+            request.getHeader("X-Real-IP"),
+            request.getRemoteAddr()
+        );
+        if (address == null) return "";
+        address = address.trim();
+        return address.length() > 64 ? address.substring(0, 64) : address;
+    }
+
     private String firstPresent(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) return value;

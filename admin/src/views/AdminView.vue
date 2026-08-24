@@ -27,16 +27,23 @@ type AdminJob = {
   workMode:string; salaryRange:string; internationalSalaryRange:string; summary:string; responsibilities:string[];
   requirements:string[]; bonus:string[]; status:string; recruitmentCount:number; updatedAt:string;
 };
+type WebsiteVisit = {
+  id:number; visit_id:string; started_at:string; qualified_at:string; last_seen_at:string;
+  duration_seconds:number; ip_address:string; entry_path:string; last_path:string;
+  device_type:string; device_model:string; operating_system:string; browser_name:string;
+  screen_resolution:string; device_language:string; device_timezone:string; user_agent:string;
+};
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
 const PUBLIC_SITE_URL=import.meta.env.VITE_PUBLIC_SITE_URL||"/";
 const apiUrl=(path:string)=>`${API_BASE}${path}`;
 const account=ref(""), password=ref(""), authenticated=ref(false), loading=ref(false), error=ref("");
 type SiteTemplate="technology"|"apple";
-const activeModule=ref<"applications"|"jobs"|"templates">("applications"), query=ref(""), stage=ref("");
+const activeModule=ref<"applications"|"visits"|"jobs"|"templates">("applications"), query=ref(""), stage=ref("");
 const referrerQuery=ref(""), createdFrom=ref(""), createdTo=ref(""), operatingSystemQuery=ref(""), deviceModelQuery=ref("");
 const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDetail|null>(null);
 const currentPage=ref(0), totalPages=ref(0), totalApplications=ref(0), pageSize=20;
+const visits=ref<WebsiteVisit[]>([]), visitPage=ref(0), totalVisitPages=ref(0), totalVisits=ref(0), visitPageSize=20;
 const jobs=ref<AdminJob[]>([]), jobEditorOpen=ref(false), editingJobId=ref<number|null>(null);
 const jobStatusFilter=ref<"all"|"online"|"offline">("all");
 const activeTemplate=ref<SiteTemplate>("technology"), templateSaving=ref(false), templateMessage=ref("");
@@ -51,6 +58,7 @@ const onlineJobCount=computed(()=>jobs.value.filter(job=>job.status==="open").le
 const offlineJobCount=computed(()=>jobs.value.length-onlineJobCount.value);
 const display=(value:unknown)=>value===null||value===undefined||value===""?"—":String(value);
 const fileSize=(bytes:number)=>bytes?`${(bytes/1024/1024).toFixed(2)} MB`:"—";
+const visitDuration=(seconds:number)=>seconds<60?`${seconds} 秒`:`${Math.floor(seconds/60)} 分 ${seconds%60} 秒`;
 const salaryInput=(value:string)=>value?.replace(/\s*USDT\s*\/月\s*$/i,"")||"";
 const CNY_PER_USDT=7;
 const parsedSalaryRange=computed(()=>jobForm.salaryRange.replace(/,/g,"").trim().match(/^([0-9]+(?:\.[0-9]+)?)([kK]?)\s*[-–—~至]\s*([0-9]+(?:\.[0-9]+)?)([kK]?)$/));
@@ -96,6 +104,18 @@ async function loadJobs(){
   try{jobs.value=await api<AdminJob[]>("/api/admin/jobs");authenticated.value=true}
   catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="岗位数据加载失败。"}
   finally{loading.value=false}
+}
+async function loadVisits(){
+  loading.value=true;error.value="";
+  try{
+    const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?page=${visitPage.value}&size=${visitPageSize}`);
+    visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;authenticated.value=true;
+  }catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
+  finally{loading.value=false}
+}
+function goToVisitPage(page:number){
+  if(page<0||page>=totalVisitPages.value||page===visitPage.value)return;
+  visitPage.value=page;void loadVisits();window.scrollTo({top:0,behavior:"smooth"});
 }
 async function loadTemplate(){
   try{const result=await api<{activeTemplate:SiteTemplate}>("/api/admin/site-settings");activeTemplate.value=result.activeTemplate;authenticated.value=true}
@@ -185,9 +205,9 @@ async function selectTemplate(template:SiteTemplate){
     activeTemplate.value=result.activeTemplate;templateMessage.value="模板已启用，刷新招聘官网即可看到新风格。";
   }catch(e){error.value=`模板切换失败：${(e as Error).message}`}finally{templateSaving.value=false}
 }
-function switchModule(module:"applications"|"jobs"|"templates"){
+function switchModule(module:"applications"|"visits"|"jobs"|"templates"){
   activeModule.value=module;
-  if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else void loadApplications();
+  if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else void loadApplications();
 }
 onMounted(loadApplications);
 </script>
@@ -209,6 +229,7 @@ onMounted(loadApplications);
       <section class="admin-main">
         <nav class="admin-modules">
           <button :class="{active:activeModule==='applications'}" @click="switchModule('applications')">候选人管理</button>
+          <button :class="{active:activeModule==='visits'}" @click="switchModule('visits')">有效浏览</button>
           <button :class="{active:activeModule==='jobs'}" @click="switchModule('jobs')">岗位管理</button>
           <button :class="{active:activeModule==='templates'}" @click="switchModule('templates')">官网模板</button>
         </nav>
@@ -270,6 +291,34 @@ onMounted(loadApplications);
               <button v-for="page in totalPages" :key="page" :class="{active:page-1===currentPage}" :disabled="loading" @click="goToPage(page-1)">{{page}}</button>
               <button :disabled="currentPage>=totalPages-1||loading" @click="goToPage(currentPage+1)">下一页 →</button>
             </div>
+          </div>
+        </template>
+
+        <template v-else-if="activeModule==='visits'">
+          <div class="admin-title"><div><small>QUALIFIED WEBSITE VISITS</small><h1>有效浏览</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
+          <p class="visit-description">访客在页面可见状态下停留满 15 秒后计入，停留期间持续更新有效时长。</p>
+          <p v-if="error" class="admin-error">{{error}}</p>
+          <p class="admin-scroll-tip">← 左右滑动查看完整访问与设备信息 →</p>
+          <div class="admin-table admin-wide-table visit-table">
+            <div class="admin-wide-row admin-row-head visit-row">
+              <span>达标时间</span><span>有效停留</span><span>网络 IP</span><span>系统版本</span>
+              <span>设备机型</span><span>设备类型</span><span>浏览器</span><span>进入页面</span>
+              <span>最后页面</span><span>最后活跃</span><span>屏幕</span><span>语言</span><span>时区</span><span>User Agent</span>
+            </div>
+            <article v-for="visit in visits" :key="visit.id" class="admin-wide-row visit-row">
+              <span>{{new Date(visit.qualified_at).toLocaleString("zh-CN")}}</span><span><b>{{visitDuration(visit.duration_seconds)}}</b></span>
+              <span>{{display(visit.ip_address)}}</span><span>{{display(visit.operating_system)}}</span>
+              <span>{{display(visit.device_model)}}</span><span>{{display(visit.device_type)}}</span>
+              <span>{{display(visit.browser_name)}}</span><span :title="visit.entry_path">{{display(visit.entry_path)}}</span>
+              <span :title="visit.last_path">{{display(visit.last_path)}}</span><span>{{new Date(visit.last_seen_at).toLocaleString("zh-CN")}}</span>
+              <span>{{display(visit.screen_resolution)}}</span><span>{{display(visit.device_language)}}</span>
+              <span>{{display(visit.device_timezone)}}</span><span :title="visit.user_agent">{{display(visit.user_agent)}}</span>
+            </article>
+            <div v-if="!loading&&!visits.length" class="admin-empty">暂无有效浏览记录</div>
+          </div>
+          <div v-if="totalVisits" class="admin-pagination">
+            <span>共 <b>{{totalVisits}}</b> 条 · 每页 {{visitPageSize}} 条</span>
+            <div><button :disabled="visitPage===0||loading" @click="goToVisitPage(visitPage-1)">← 上一页</button><button v-for="page in totalVisitPages" :key="page" :class="{active:page-1===visitPage}" :disabled="loading" @click="goToVisitPage(page-1)">{{page}}</button><button :disabled="visitPage>=totalVisitPages-1||loading" @click="goToVisitPage(visitPage+1)">下一页 →</button></div>
           </div>
         </template>
 
