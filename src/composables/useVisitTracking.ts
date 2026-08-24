@@ -5,8 +5,25 @@ import { collectDeviceInfo } from "../utils/deviceInfo";
 const VISIT_ID_KEY = "xw-visit-id";
 const VISIT_SECONDS_KEY = "xw-visit-visible-seconds";
 const VISIT_ENTRY_KEY = "xw-visit-entry-path";
-const QUALIFIED_SECONDS = 15;
+const QUALIFIED_SECONDS = 10;
 const HEARTBEAT_SECONDS = 10;
+
+export function visibleVisitSeconds() {
+  return Math.max(0, Number(sessionStorage.getItem(VISIT_SECONDS_KEY) || 0));
+}
+
+export function waitForVisibleVisitSeconds(minimumSeconds: number) {
+  const target = Math.max(0, Math.floor(minimumSeconds));
+  if (visibleVisitSeconds() >= target) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const timer = window.setInterval(() => {
+      if (visibleVisitSeconds() < target) return;
+      window.clearInterval(timer);
+      resolve();
+    }, 250);
+  });
+}
 
 function currentPath() {
   return `${location.pathname}${location.search}`.slice(0, 500);
@@ -22,7 +39,7 @@ function visitId() {
 
 export function useVisitTracking() {
   let timer: number | undefined;
-  let seconds = Number(sessionStorage.getItem(VISIT_SECONDS_KEY) || 0);
+  let seconds = visibleVisitSeconds();
   let qualified = seconds >= QUALIFIED_SECONDS;
   let qualifying = false;
   let duplicate = false;

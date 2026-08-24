@@ -19,16 +19,10 @@ public class WebsiteVisitService {
     public synchronized QualifyResult qualify(VisitRequest request, String ipAddress) {
         validateVisitId(request.visitId());
         int duration = boundedDuration(request.durationSeconds());
-        if (duration < 15) throw new IllegalArgumentException("Visit must be at least 15 seconds.");
+        if (duration < 10) throw new IllegalArgumentException("Visit must be at least 10 seconds.");
         Instant now = Instant.now();
         WebsiteVisitEntity visit = repository.findByVisitId(request.visitId()).orElse(null);
         if (visit == null) {
-            String cleanIpAddress = clean(ipAddress, 64);
-            String cleanTimezone = clean(request.deviceTimezone(), 120);
-            if (!cleanIpAddress.isBlank() && !cleanTimezone.isBlank()
-                && repository.findFirstByIpAddressAndDeviceTimezone(cleanIpAddress, cleanTimezone).isPresent()) {
-                return new QualifyResult(false, true);
-            }
             visit = new WebsiteVisitEntity();
         }
         if (visit.getVisitId() == null) {
@@ -64,8 +58,11 @@ public class WebsiteVisitService {
         return repository.save(visit);
     }
 
-    public Page<WebsiteVisitEntity> list(int page, int size) {
-        return repository.findAllByOrderByQualifiedAtDesc(PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100)));
+    public Page<WebsiteVisitEntity> list(int page, int size, int minDurationSeconds) {
+        return repository.findAllByDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
+            Math.min(Math.max(minDurationSeconds, 0), 86400),
+            PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100))
+        );
     }
 
     private void validateVisitId(String value) {

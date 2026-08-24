@@ -5,7 +5,7 @@ import XwLogo from "../components/XwLogo.vue";
 type Application = {
   id:number; application_no:string; resume_name:string; telegram:string; gender:string; age:string;
   birth_date:string; nationality_country:string; job_title:string; current_salary:string;
-  referrer:string;
+  referrer:string; remarks:string;
   expected_salary:string; bc_experience:string; employment_status:string; education_type:string;
   school:string; education_period:string; passport_status:string; visa_status:string;
   interview_time:string; start_time:string; current_country:string; preferred_country:string;
@@ -44,6 +44,7 @@ const referrerQuery=ref(""), createdFrom=ref(""), createdTo=ref(""), operatingSy
 const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDetail|null>(null);
 const currentPage=ref(0), totalPages=ref(0), totalApplications=ref(0), pageSize=20;
 const visits=ref<WebsiteVisit[]>([]), visitPage=ref(0), totalVisitPages=ref(0), totalVisits=ref(0), visitPageSize=20;
+const visitMinDuration=ref<number|"">("");
 const jobs=ref<AdminJob[]>([]), jobEditorOpen=ref(false), editingJobId=ref<number|null>(null);
 const jobStatusFilter=ref<"all"|"online"|"offline">("all");
 const activeTemplate=ref<SiteTemplate>("technology"), templateSaving=ref(false), templateMessage=ref("");
@@ -108,11 +109,14 @@ async function loadJobs(){
 async function loadVisits(){
   loading.value=true;error.value="";
   try{
-    const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?page=${visitPage.value}&size=${visitPageSize}`);
+    const minDurationSeconds=Math.max(0,Math.floor(Number(visitMinDuration.value)||0));
+    const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds)});
+    const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?${params}`);
     visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;authenticated.value=true;
   }catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
   finally{loading.value=false}
 }
+function searchVisits(){visitPage.value=0;void loadVisits()}
 function goToVisitPage(page:number){
   if(page<0||page>=totalVisitPages.value||page===visitPage.value)return;
   visitPage.value=page;void loadVisits();window.scrollTo({top:0,behavior:"smooth"});
@@ -249,7 +253,7 @@ onMounted(loadApplications);
           <p class="admin-scroll-tip">← 左右滑动查看全部候选人信息，点击任意一行打开详情 →</p>
           <div class="admin-table admin-wide-table">
             <div class="admin-wide-row admin-row-head">
-              <span>操作</span><span>提交时间</span><span>推荐人</span><span>系统版本</span>
+              <span>操作</span><span>提交时间</span><span>推荐人</span><span>备注</span><span>系统版本</span>
               <span>申请编号</span><span>简历名</span><span>Telegram</span><span>性别</span><span>年龄</span>
               <span>出生年月日</span><span>国籍</span><span>求职岗位</span><span>目前薪资</span><span>期望薪资</span>
               <span>BC 经验</span><span>就业状态</span><span>第一学历</span><span>学校全名</span><span>就读时间</span>
@@ -262,6 +266,7 @@ onMounted(loadApplications);
               <span><button class="candidate-delete" type="button" @click.stop="deleteApplication(item)">删除</button></span>
               <span>{{new Date(item.created_at).toLocaleString("zh-CN")}}</span>
               <span :title="item.referrer"><b>{{display(item.referrer)}}</b></span>
+              <span :title="item.remarks">{{display(item.remarks)}}</span>
               <span>{{display(item.operating_system)}}</span>
               <span :title="item.application_no">{{display(item.application_no)}}</span>
               <span :title="item.resume_name"><b>{{display(item.resume_name)}}</b></span>
@@ -296,7 +301,11 @@ onMounted(loadApplications);
 
         <template v-else-if="activeModule==='visits'">
           <div class="admin-title"><div><small>QUALIFIED WEBSITE VISITS</small><h1>有效浏览</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
-          <p class="visit-description">访客在页面可见状态下停留满 15 秒后计入，停留期间持续更新有效时长。</p>
+          <p class="visit-description">访客在页面可见状态下停留满 10 秒后计入，停留期间持续更新有效时长。</p>
+          <div class="admin-toolbar">
+            <label><span>有效时长 ≥</span><input v-model.number="visitMinDuration" type="number" min="0" step="1" placeholder="秒" @keyup.enter="searchVisits"/></label>
+            <button type="button" @click="searchVisits">查询</button>
+          </div>
           <p v-if="error" class="admin-error">{{error}}</p>
           <p class="admin-scroll-tip">← 左右滑动查看完整访问与设备信息 →</p>
           <div class="admin-table admin-wide-table visit-table">
@@ -366,6 +375,7 @@ onMounted(loadApplications);
         <section><h3>求职信息</h3><dl>
           <div><dt>岗位</dt><dd>{{display(selectedApplication.summary.job_title)}}</dd></div><div><dt>Telegram</dt><dd>{{display(selectedApplication.summary.telegram)}}</dd></div>
           <div><dt>推荐人</dt><dd>{{display(selectedApplication.summary.referrer)}}</dd></div>
+          <div><dt>备注</dt><dd>{{display(selectedApplication.summary.remarks)}}</dd></div>
           <div><dt>目前 / 期望薪资</dt><dd>{{selectedApplication.current_salary}} / {{selectedApplication.summary.expected_salary}}</dd></div>
           <div><dt>所在地 / 意向地</dt><dd>{{selectedApplication.summary.current_country}} / {{selectedApplication.summary.preferred_country}}</dd></div>
           <div><dt>面试 / 到职</dt><dd>{{selectedApplication.interview_time}} / {{selectedApplication.start_time}}</dd></div>

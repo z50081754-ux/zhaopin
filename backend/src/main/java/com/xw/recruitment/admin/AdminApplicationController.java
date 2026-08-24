@@ -86,6 +86,7 @@ public class AdminApplicationController {
         @JsonProperty("nationality_country") String nationalityCountry,
         @JsonProperty("job_title") String jobTitle,
         String referrer,
+        String remarks,
         @JsonProperty("current_salary") String currentSalary,
         @JsonProperty("expected_salary") String expectedSalary,
         @JsonProperty("bc_experience") String bcExperience,
@@ -116,7 +117,7 @@ public class AdminApplicationController {
         static AdminItem from(ApplicationEntity a) {
             return new AdminItem(a.getId(), a.getApplicationNo(), a.getResumeName(), a.getTelegram(),
                 a.getGender(), a.getAgeAtApplication(), a.getBirthDate(), a.getNationality(),
-                a.getJobTitle(), a.getReferrer(), a.getCurrentSalary(), a.getExpectedSalary(), a.getBcExperience(),
+                a.getJobTitle(), a.getReferrer(), a.getRemarks(), a.getCurrentSalary(), a.getExpectedSalary(), a.getBcExperience(),
                 a.getEmploymentStatus(), a.getEducationType(), a.getSchool(), a.getEducationPeriod(),
                 a.getPassportStatus(), a.getVisaStatus(), a.getInterviewTime(), a.getStartTime(),
                 a.getCurrentCountry(), a.getPreferredCountry(), a.getStage(), a.isPossibleDuplicate(),

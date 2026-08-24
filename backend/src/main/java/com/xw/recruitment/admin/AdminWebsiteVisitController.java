@@ -19,9 +19,10 @@ public class AdminWebsiteVisitController {
     @GetMapping
     public ListResponse list(
         @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(defaultValue = "20") int size,
+        @RequestParam(defaultValue = "0") int minDurationSeconds
     ) {
-        Page<WebsiteVisitEntity> result = service.list(page, size);
+        Page<WebsiteVisitEntity> result = service.list(page, size, minDurationSeconds);
         return new ListResponse(result.getContent().stream().map(VisitItem::from).toList(),
             result.getTotalElements(), result.getTotalPages());
     }

@@ -1,5 +1,6 @@
 package com.xw.recruitment.application;
 
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.multipart.MultipartFile;
 
 public record ApplicationRequest(
@@ -10,7 +11,8 @@ public record ApplicationRequest(
     String birthDate,
     String nationality,
     String job,
-    String referrer,
+    @NotBlank(message = "Referrer is required.") String referrer,
+    String remarks,
     String currentSalary,
     String expectedSalary,
     String bcExperience,

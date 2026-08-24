@@ -17,6 +17,8 @@ public class ApplicationEntity {
     private String nationality;
     private String jobTitle;
     private String referrer;
+    @Column(length = 2000)
+    private String remarks;
     private String currentSalary;
     private String expectedSalary;
     private String bcExperience;
@@ -71,6 +73,8 @@ public class ApplicationEntity {
     public void setJobTitle(String value) { jobTitle = value; }
     public String getReferrer() { return referrer; }
     public void setReferrer(String value) { referrer = value; }
+    public String getRemarks() { return remarks; }
+    public void setRemarks(String value) { remarks = value; }
     public String getCurrentSalary() { return currentSalary; }
     public void setCurrentSalary(String value) { currentSalary = value; }
     public String getExpectedSalary() { return expectedSalary; }

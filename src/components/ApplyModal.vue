@@ -6,6 +6,7 @@ import XwLogo from "./XwLogo.vue";
 import { collectDeviceInfo } from "../utils/deviceInfo";
 import { apiUrl } from "../utils/api";
 import { useSiteTemplate } from "../composables/useSiteTemplate";
+import { waitForVisibleVisitSeconds } from "../composables/useVisitTracking";
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -13,16 +14,18 @@ const { language } = useLanguage();
 const { activeTemplate } = useSiteTemplate();
 const { jobs, loadJobs } = useJobs();
 const submitting = ref(false);
+const finalizingSubmission = ref(false);
 const submitted = ref(false);
 const submitError = ref("");
 const applicationNo = ref("");
 const uploadProgress = ref(0);
 const resume = ref<File | null>(null);
+const referrerInput = ref<HTMLInputElement | null>(null);
 const form = reactive({
   resumeName:"", telegram:"", gender:"", age:"", birthDate:"", nationality:"",
   job:"", currentSalary:"", expectedSalary:"", bcExperience:"", employmentStatus:"",
   educationType:"", school:"", educationPeriod:"", passport:"", visa:"",
-  interviewTime:"", startTime:"", currentCountry:"", preferredCountry:"", referrer:"", consent:false
+  interviewTime:"", startTime:"", currentCountry:"", preferredCountry:"", referrer:"", remarks:"", consent:false
 });
 onMounted(loadJobs);
 const label = (zh:string,en:string) => language.value === "zh" ? zh : en;
@@ -59,6 +62,11 @@ const upload = (payload: FormData) => new Promise<{ok?:boolean;applicationNo?:st
   request.send(payload);
 });
 const submit = async () => {
+  if (!form.referrer.trim()) {
+    window.alert(label("请填写推荐人后再提交。","Please enter the referrer before submitting."));
+    referrerInput.value?.focus();
+    return;
+  }
   submitting.value = true;
   uploadProgress.value = 0;
   submitError.value = "";
@@ -69,6 +77,8 @@ const submit = async () => {
     if (resume.value) payload.append("resume", resume.value);
     const result = await upload(payload);
     if (!result.ok) throw new Error(result.code || "SUBMIT_FAILED");
+    finalizingSubmission.value = true;
+    await waitForVisibleVisitSeconds(15);
     applicationNo.value = result.applicationNo || "";
     submitted.value = true;
   } catch (error) {
@@ -82,6 +92,7 @@ const submit = async () => {
         : "Submission failed. Please try again or contact our recruiting team on Telegram."
     );
   } finally {
+    finalizingSubmission.value = false;
     submitting.value = false;
   }
 };
@@ -99,7 +110,7 @@ const submit = async () => {
             <a href="https://t.me/XWcompany123" target="_blank" rel="noopener">@XWcompany123</a>
           </header>
 
-          <form v-if="!submitted" class="long-form-body" @submit.prevent="submit">
+          <form v-if="!submitted" class="long-form-body" novalidate @submit.prevent="submit">
             <label><span>{{ label('简历名','Resume name') }}</span><input v-model="form.resumeName" :placeholder="label('英文名或姓名首字母','English name or initials')" /></label>
             <label><span>Telegram</span><input v-model="form.telegram" placeholder="@username" /></label>
             <label><span>{{ label('性别','Gender') }}</span><input v-model="form.gender" /></label>
@@ -107,7 +118,7 @@ const submit = async () => {
             <label><span>{{ label('出生年月日','Date of birth') }}</span><input v-model="form.birthDate" :placeholder="label('年 / 月 / 日','Year / Month / Day')" /></label>
             <label><span>{{ label('国籍（国家）','Nationality (country)') }}</span><input v-model="form.nationality" /></label>
             <label><span>{{ label('求职岗位','Position') }}</span><input v-model="form.job" list="xw-job-list" /><datalist id="xw-job-list"><option v-for="job in jobs" :key="job.slug" :value="job.title" /></datalist></label>
-            <label><span>{{ label('推荐人','Referrer') }}</span><input v-model="form.referrer" :placeholder="label('推荐人姓名或联系方式','Name or contact details')" /></label>
+            <label><span class="required-label"><i>*</i>{{ label('推荐人','Referrer') }}</span><input ref="referrerInput" v-model="form.referrer" required :placeholder="label('推荐人姓名或联系方式','Name or contact details')" /></label>
             <label><span>{{ label('目前薪资（月）','Current monthly salary') }}</span><input v-model="form.currentSalary" :placeholder="label('金额及币种，如 50,000 THB','Amount and currency, e.g. 2,000 USD')" /></label>
             <label><span>{{ label('期望薪资（月）','Expected monthly salary') }}</span><input v-model="form.expectedSalary" :placeholder="label('金额及币种','Amount and currency')" /></label>
             <label><span>{{ label('有无 BC 经验','BC experience') }}</span><input v-model="form.bcExperience" /></label>
@@ -121,6 +132,7 @@ const submit = async () => {
             <label><span>{{ label('可到职时间','Available start time') }}</span><input v-model="form.startTime" /></label>
             <label><span>{{ label('目前所在地（国家）','Current country') }}</span><input v-model="form.currentCountry" /></label>
             <label><span>{{ label('期望工作地（国家）','Preferred work country') }}</span><input v-model="form.preferredCountry" /></label>
+            <label><span>{{ label('备注','Remarks') }}</span><textarea v-model="form.remarks" maxlength="2000" :placeholder="label('可补充需要招聘团队了解的信息','Add anything else the recruiting team should know')"></textarea></label>
             <label class="upload-label">
               <span>{{ label('上传简历','Upload resume') }}</span>
               <input type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="onFile" />
@@ -129,7 +141,7 @@ const submit = async () => {
             </label>
             <label class="consent"><input v-model="form.consent" type="checkbox" /><span>{{ label('我同意 XW 为招聘联系及评估处理以上资料，并记录浏览器提供的设备类型、系统、浏览器、语言和时区信息用于投递安全与技术支持。','I consent to XW processing this information and recording browser-provided device, operating system, browser, language and time-zone details for application security and technical support.') }}</span></label>
             <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
-            <button class="primary-btn long-submit" type="submit" :disabled="submitting">{{ submitting ? (uploadProgress ? label(`正在上传 ${uploadProgress}%`,`Uploading ${uploadProgress}%`) : label('正在连接…','Connecting…')) : label('确认提交','Submit application') }}</button>
+            <button class="primary-btn long-submit" type="submit" :disabled="submitting">{{ submitting ? (finalizingSubmission ? label('提交中…','Submitting…') : uploadProgress ? label(`正在上传 ${uploadProgress}%`,`Uploading ${uploadProgress}%`) : label('正在连接…','Connecting…')) : label('确认提交','Submit application') }}</button>
           </form>
 
           <div v-else class="success-state">

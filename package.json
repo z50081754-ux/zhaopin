@@ -13,6 +13,7 @@
     "build:admin": "npm --prefix admin run build",
     "build:all": "npm run build && npm run build:admin",
     "deploy:web": "bash scripts/deploy-web.sh",
+    "deploy:all": "bash scripts/deploy-all.sh",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -27,6 +27,8 @@ public class ApplicationService {
 
     @Transactional
     public ApplicationEntity submit(ApplicationRequest request) {
+        String referrer = clean(request.referrer());
+        if (referrer.isBlank()) throw new IllegalArgumentException("Referrer is required.");
         Instant now = Instant.now();
         String date = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC).format(now);
         String applicationNo = "XW-" + date + "-" + UUID.randomUUID().toString()
@@ -43,7 +45,8 @@ public class ApplicationService {
         entity.setBirthDate(clean(request.birthDate()));
         entity.setNationality(clean(request.nationality()));
         entity.setJobTitle(clean(request.job()));
-        entity.setReferrer(clean(request.referrer()));
+        entity.setReferrer(referrer);
+        entity.setRemarks(clean(request.remarks(), 2000));
         entity.setCurrentSalary(clean(request.currentSalary()));
         entity.setExpectedSalary(clean(request.expectedSalary()));
         entity.setBcExperience(clean(request.bcExperience()));
@@ -126,7 +129,11 @@ public class ApplicationService {
     }
 
     private String clean(String value) {
+        return clean(value, 1000);
+    }
+
+    private String clean(String value, int maxLength) {
         String cleaned = value == null ? "" : value.trim();
-        return cleaned.length() > 1000 ? cleaned.substring(0, 1000) : cleaned;
+        return cleaned.length() > maxLength ? cleaned.substring(0, maxLength) : cleaned;
     }
 }
