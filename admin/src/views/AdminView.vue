@@ -10,7 +10,7 @@ type Application = {
   school:string; education_period:string; passport_status:string; visa_status:string;
   interview_time:string; start_time:string; current_country:string; preferred_country:string;
   stage:string; is_possible_duplicate:number; original_filename?:string; resume_size:number;
-  device_type:string; device_model:string; operating_system:string; browser_name:string;
+  ip_address:string; device_type:string; device_model:string; operating_system:string; browser_name:string;
   screen_resolution:string; device_language:string; device_timezone:string; user_agent:string;
   created_at:string;
 };
@@ -42,8 +42,10 @@ type SiteTemplate="technology"|"apple";
 const activeModule=ref<"applications"|"visits"|"jobs"|"templates">("applications"), query=ref(""), stage=ref("");
 const referrerQuery=ref(""), createdFrom=ref(""), createdTo=ref(""), operatingSystemQuery=ref(""), deviceModelQuery=ref("");
 const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDetail|null>(null);
+const selectedApplicationIds=ref<number[]>([]);
 const currentPage=ref(0), totalPages=ref(0), totalApplications=ref(0), pageSize=20;
 const visits=ref<WebsiteVisit[]>([]), visitPage=ref(0), totalVisitPages=ref(0), totalVisits=ref(0), visitPageSize=20;
+const selectedVisitIds=ref<number[]>([]);
 const visitMinDuration=ref<number|"">("");
 const jobs=ref<AdminJob[]>([]), jobEditorOpen=ref(false), editingJobId=ref<number|null>(null);
 const jobStatusFilter=ref<"all"|"online"|"offline">("all");
@@ -53,6 +55,8 @@ const jobForm=reactive(emptyJob());
 const stageLabels:Record<string,string>={new:"新投递",screening:"筛选中",interview:"面试中",offer:"Offer",hired:"已录用",rejected:"不合适"};
 const jobStatusLabels:Record<string,string>={draft:"未上线",open:"已上线",paused:"已下线",closed:"已下线"};
 const filteredCount=computed(()=>totalApplications.value);
+const allApplicationsOnPageSelected=computed(()=>applications.value.length>0&&applications.value.every(item=>selectedApplicationIds.value.includes(item.id)));
+const allVisitsOnPageSelected=computed(()=>visits.value.length>0&&visits.value.every(item=>selectedVisitIds.value.includes(item.id)));
 const totalJobCount=computed(()=>jobs.value.length);
 const filteredJobs=computed(()=>jobs.value.filter(job=>jobStatusFilter.value==="all"||(jobStatusFilter.value==="online"?job.status==="open":job.status!=="open")));
 const onlineJobCount=computed(()=>jobs.value.filter(job=>job.status==="open").length);
@@ -85,7 +89,7 @@ async function api<T>(url:string,options:RequestInit={}):Promise<T>{
   return result as T;
 }
 async function loadApplications(){
-  loading.value=true; error.value="";
+  loading.value=true; error.value="";selectedApplicationIds.value=[];
   try{
     const params=new URLSearchParams({q:query.value,stage:stage.value,referrer:referrerQuery.value,
       createdFrom:createdFrom.value,createdTo:createdTo.value,operatingSystem:operatingSystemQuery.value,
@@ -107,7 +111,7 @@ async function loadJobs(){
   finally{loading.value=false}
 }
 async function loadVisits(){
-  loading.value=true;error.value="";
+  loading.value=true;error.value="";selectedVisitIds.value=[];
   try{
     const minDurationSeconds=Math.max(0,Math.floor(Number(visitMinDuration.value)||0));
     const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds)});
@@ -117,6 +121,32 @@ async function loadVisits(){
   finally{loading.value=false}
 }
 function searchVisits(){visitPage.value=0;void loadVisits()}
+async function deleteVisit(visit:WebsiteVisit){
+  if(!window.confirm(`确定删除这条有效浏览记录吗？\nIP：${display(visit.ip_address)}\n有效停留：${visitDuration(visit.duration_seconds)}\n删除后无法恢复。`))return;
+  loading.value=true;error.value="";
+  try{
+    await api(`/api/admin/visits/${visit.id}`,{method:"DELETE"});
+    if(visits.value.length===1&&visitPage.value>0)visitPage.value--;
+    await loadVisits();
+  }catch(e){error.value=`有效浏览记录删除失败：${(e as Error).message}`}finally{loading.value=false}
+}
+function toggleAllVisits(){
+  const pageIds=visits.value.map(item=>item.id);
+  selectedVisitIds.value=allVisitsOnPageSelected.value
+    ?selectedVisitIds.value.filter(id=>!pageIds.includes(id))
+    :Array.from(new Set([...selectedVisitIds.value,...pageIds]));
+}
+async function deleteSelectedVisits(){
+  const ids=[...selectedVisitIds.value];
+  if(!ids.length||!window.confirm(`确定批量删除选中的 ${ids.length} 条有效浏览记录吗？删除后无法恢复。`))return;
+  loading.value=true;error.value="";
+  try{
+    await api("/api/admin/visits/batch",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})});
+    selectedVisitIds.value=[];
+    if(visits.value.every(visit=>ids.includes(visit.id))&&visitPage.value>0)visitPage.value--;
+    await loadVisits();
+  }catch(e){error.value=`有效浏览记录批量删除失败：${(e as Error).message}`}finally{loading.value=false}
+}
 function goToVisitPage(page:number){
   if(page<0||page>=totalVisitPages.value||page===visitPage.value)return;
   visitPage.value=page;void loadVisits();window.scrollTo({top:0,behavior:"smooth"});
@@ -201,6 +231,24 @@ async function deleteApplication(item:Application){
   }
   catch(e){error.value=`候选人删除失败：${(e as Error).message}`}finally{loading.value=false}
 }
+function toggleAllApplications(){
+  const pageIds=applications.value.map(item=>item.id);
+  selectedApplicationIds.value=allApplicationsOnPageSelected.value
+    ?selectedApplicationIds.value.filter(id=>!pageIds.includes(id))
+    :Array.from(new Set([...selectedApplicationIds.value,...pageIds]));
+}
+async function deleteSelectedApplications(){
+  const ids=[...selectedApplicationIds.value];
+  if(!ids.length||!window.confirm(`确定批量删除选中的 ${ids.length} 条候选人记录吗？简历文件也会一并删除，且无法恢复。`))return;
+  loading.value=true;error.value="";
+  try{
+    await api("/api/admin/applications/batch",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})});
+    if(selectedApplication.value&&ids.includes(selectedApplication.value.summary.id))selectedApplication.value=null;
+    selectedApplicationIds.value=[];
+    if(applications.value.every(item=>ids.includes(item.id))&&currentPage.value>0)currentPage.value--;
+    await loadApplications();
+  }catch(e){error.value=`候选人批量删除失败：${(e as Error).message}`}finally{loading.value=false}
+}
 async function selectTemplate(template:SiteTemplate){
   if(template===activeTemplate.value)return;
   templateSaving.value=true;templateMessage.value="";error.value="";
@@ -249,11 +297,12 @@ onMounted(loadApplications);
             <label><span>机型</span><input v-model="deviceModelQuery" placeholder="如 iPhone" @keyup.enter="searchApplications"/></label>
             <button type="button" @click="searchApplications">查询</button>
           </div>
+          <div class="bulk-actions"><button type="button" :disabled="!selectedApplicationIds.length||loading" @click="deleteSelectedApplications">批量删除已选（{{selectedApplicationIds.length}}）</button></div>
           <p v-if="error" class="admin-error">{{error}}</p>
           <p class="admin-scroll-tip">← 左右滑动查看全部候选人信息，点击任意一行打开详情 →</p>
           <div class="admin-table admin-wide-table">
             <div class="admin-wide-row admin-row-head">
-              <span>操作</span><span>提交时间</span><span>推荐人</span><span>备注</span><span>系统版本</span>
+              <span class="select-action"><input type="checkbox" :checked="allApplicationsOnPageSelected" aria-label="选择本页候选人" @change="toggleAllApplications"/>操作</span><span>提交时间</span><span>网络 IP</span><span>推荐人</span><span>备注</span><span>系统版本</span>
               <span>申请编号</span><span>简历名</span><span>Telegram</span><span>性别</span><span>年龄</span>
               <span>出生年月日</span><span>国籍</span><span>求职岗位</span><span>目前薪资</span><span>期望薪资</span>
               <span>BC 经验</span><span>就业状态</span><span>第一学历</span><span>学校全名</span><span>就读时间</span>
@@ -263,8 +312,9 @@ onMounted(loadApplications);
               <span>时区</span><span>User Agent</span>
             </div>
             <article v-for="item in applications" :key="item.id" class="admin-wide-row clickable" @click="openApplication(item)">
-              <span><button class="candidate-delete" type="button" @click.stop="deleteApplication(item)">删除</button></span>
+              <span class="select-action"><input v-model="selectedApplicationIds" :value="item.id" type="checkbox" :aria-label="`选择候选人 ${display(item.resume_name)}`" @click.stop/><button class="candidate-delete" type="button" @click.stop="deleteApplication(item)">删除</button></span>
               <span>{{new Date(item.created_at).toLocaleString("zh-CN")}}</span>
+              <span>{{display(item.ip_address)}}</span>
               <span :title="item.referrer"><b>{{display(item.referrer)}}</b></span>
               <span :title="item.remarks">{{display(item.remarks)}}</span>
               <span>{{display(item.operating_system)}}</span>
@@ -306,15 +356,17 @@ onMounted(loadApplications);
             <label><span>有效时长 ≥</span><input v-model.number="visitMinDuration" type="number" min="0" step="1" placeholder="秒" @keyup.enter="searchVisits"/></label>
             <button type="button" @click="searchVisits">查询</button>
           </div>
+          <div class="bulk-actions"><button type="button" :disabled="!selectedVisitIds.length||loading" @click="deleteSelectedVisits">批量删除已选（{{selectedVisitIds.length}}）</button></div>
           <p v-if="error" class="admin-error">{{error}}</p>
           <p class="admin-scroll-tip">← 左右滑动查看完整访问与设备信息 →</p>
           <div class="admin-table admin-wide-table visit-table">
             <div class="admin-wide-row admin-row-head visit-row">
-              <span>达标时间</span><span>有效停留</span><span>网络 IP</span><span>系统版本</span>
+              <span class="select-action"><input type="checkbox" :checked="allVisitsOnPageSelected" aria-label="选择本页有效浏览" @change="toggleAllVisits"/>操作</span><span>达标时间</span><span>有效停留</span><span>网络 IP</span><span>系统版本</span>
               <span>设备机型</span><span>设备类型</span><span>浏览器</span><span>进入页面</span>
               <span>最后页面</span><span>最后活跃</span><span>屏幕</span><span>语言</span><span>时区</span><span>User Agent</span>
             </div>
             <article v-for="visit in visits" :key="visit.id" class="admin-wide-row visit-row">
+              <span class="select-action"><input v-model="selectedVisitIds" :value="visit.id" type="checkbox" :aria-label="`选择访问记录 ${visit.id}`"/><button class="candidate-delete" type="button" :disabled="loading" @click="deleteVisit(visit)">删除</button></span>
               <span>{{new Date(visit.qualified_at).toLocaleString("zh-CN")}}</span><span><b>{{visitDuration(visit.duration_seconds)}}</b></span>
               <span>{{display(visit.ip_address)}}</span><span>{{display(visit.operating_system)}}</span>
               <span>{{display(visit.device_model)}}</span><span>{{display(visit.device_type)}}</span>
@@ -381,6 +433,7 @@ onMounted(loadApplications);
           <div><dt>面试 / 到职</dt><dd>{{selectedApplication.interview_time}} / {{selectedApplication.start_time}}</dd></div>
         </dl></section>
         <section><h3>设备信息</h3><dl>
+          <div><dt>网络 IP</dt><dd>{{display(selectedApplication.summary.ip_address)}}</dd></div>
           <div><dt>设备</dt><dd>{{selectedApplication.device_type}} · {{selectedApplication.device_model}}</dd></div>
           <div><dt>系统</dt><dd>{{selectedApplication.operating_system}}</dd></div><div><dt>浏览器</dt><dd>{{selectedApplication.browser_name}}</dd></div>
           <div><dt>屏幕</dt><dd>{{selectedApplication.screen_resolution}}</dd></div><div><dt>语言 / 时区</dt><dd>{{selectedApplication.device_language}} / {{selectedApplication.device_timezone}}</dd></div>

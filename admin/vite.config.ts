@@ -8,7 +8,15 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 3001,
     allowedHosts: [".trycloudflare.com"],
-    proxy: { "/api": "http://localhost:8080" }
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on("proxyReq", proxyRequest => proxyRequest.removeHeader("origin"));
+        }
+      }
+    }
   },
   build: { outDir: "dist", emptyOutDir: true }
 });

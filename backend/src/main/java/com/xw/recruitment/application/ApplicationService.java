@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,7 +27,7 @@ public class ApplicationService {
     }
 
     @Transactional
-    public ApplicationEntity submit(ApplicationRequest request) {
+    public ApplicationEntity submit(ApplicationRequest request, String ipAddress) {
         String referrer = clean(request.referrer());
         if (referrer.isBlank()) throw new IllegalArgumentException("Referrer is required.");
         Instant now = Instant.now();
@@ -60,6 +61,7 @@ public class ApplicationService {
         entity.setStartTime(clean(request.startTime()));
         entity.setCurrentCountry(clean(request.currentCountry()));
         entity.setPreferredCountry(clean(request.preferredCountry()));
+        entity.setIpAddress(clean(ipAddress, 64));
         entity.setDeviceType(clean(request.deviceType()));
         entity.setDeviceModel(clean(request.deviceModel()));
         entity.setOperatingSystem(clean(request.operatingSystem()));
@@ -103,6 +105,15 @@ public class ApplicationService {
         ApplicationEntity entity = get(id);
         storage.delete(entity.getResumeStorageKey());
         repository.delete(entity);
+    }
+
+    @Transactional
+    public int deleteAll(List<Long> ids) {
+        List<Long> safeIds = ids == null ? List.of() : ids.stream().filter(id -> id != null && id > 0).distinct().limit(100).toList();
+        List<ApplicationEntity> entities = repository.findAllById(safeIds);
+        entities.forEach(entity -> storage.delete(entity.getResumeStorageKey()));
+        repository.deleteAll(entities);
+        return entities.size();
     }
 
     private Instant startOfDay(String value) {

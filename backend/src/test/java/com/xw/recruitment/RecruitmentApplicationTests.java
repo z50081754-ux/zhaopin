@@ -7,7 +7,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,6 +51,26 @@ class RecruitmentApplicationTests {
     void rejectsVisitsShorterThanTenSeconds() {
         assertThrows(IllegalArgumentException.class,
             () -> websiteVisitService.qualify(visit("visit-000000000003", 9), "127.0.0.1"));
+    }
+
+    @Test
+    void deletesVisitById() {
+        websiteVisitService.qualify(visit("visit-000000000004", 10), "127.0.0.1");
+        long id = websiteVisitRepository.findByVisitId("visit-000000000004").orElseThrow().getId();
+
+        websiteVisitService.delete(id);
+
+        assertFalse(websiteVisitRepository.existsById(id));
+    }
+
+    @Test
+    void deletesMultipleVisits() {
+        websiteVisitService.qualify(visit("visit-000000000005", 10), "127.0.0.1");
+        websiteVisitService.qualify(visit("visit-000000000006", 20), "127.0.0.1");
+        List<Long> ids = websiteVisitRepository.findAll().stream().map(visit -> visit.getId()).toList();
+
+        assertEquals(2, websiteVisitService.deleteAll(ids));
+        assertEquals(0, websiteVisitRepository.count());
     }
 
     private WebsiteVisitService.VisitRequest visit(String id, int durationSeconds) {

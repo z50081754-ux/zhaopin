@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 
 @Service
 public class WebsiteVisitService {
@@ -63,6 +64,20 @@ public class WebsiteVisitService {
             Math.min(Math.max(minDurationSeconds, 0), 86400),
             PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100))
         );
+    }
+
+    @Transactional
+    public void delete(long id) {
+        if (!repository.existsById(id)) throw new IllegalArgumentException("Visit not found.");
+        repository.deleteById(id);
+    }
+
+    @Transactional
+    public int deleteAll(List<Long> ids) {
+        List<Long> safeIds = ids == null ? List.of() : ids.stream().filter(id -> id != null && id > 0).distinct().limit(100).toList();
+        List<WebsiteVisitEntity> visits = repository.findAllById(safeIds);
+        repository.deleteAll(visits);
+        return visits.size();
     }
 
     private void validateVisitId(String value) {

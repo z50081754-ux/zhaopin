@@ -48,10 +48,17 @@ public class AdminApplicationController {
         return Map.of("ok", true);
     }
 
+    @DeleteMapping("/batch")
+    public Map<String, Object> deleteBatch(@RequestBody BatchDeleteRequest request) {
+        return Map.of("ok", true, "deleted", service.deleteAll(request.ids()));
+    }
+
     @GetMapping("/{id}")
     public AdminDetail detail(@PathVariable long id) {
         return AdminDetail.from(service.get(id));
     }
+
+    public record BatchDeleteRequest(List<Long> ids) {}
 
     @PatchMapping("/{id}/stage")
     public AdminItem updateStage(@PathVariable long id, @RequestBody StageRequest request) {
@@ -104,6 +111,7 @@ public class AdminApplicationController {
         @JsonProperty("is_possible_duplicate") boolean possibleDuplicate,
         @JsonProperty("original_filename") String originalFilename,
         @JsonProperty("resume_size") long resumeSize,
+        @JsonProperty("ip_address") String ipAddress,
         @JsonProperty("device_type") String deviceType,
         @JsonProperty("device_model") String deviceModel,
         @JsonProperty("operating_system") String operatingSystem,
@@ -121,7 +129,7 @@ public class AdminApplicationController {
                 a.getEmploymentStatus(), a.getEducationType(), a.getSchool(), a.getEducationPeriod(),
                 a.getPassportStatus(), a.getVisaStatus(), a.getInterviewTime(), a.getStartTime(),
                 a.getCurrentCountry(), a.getPreferredCountry(), a.getStage(), a.isPossibleDuplicate(),
-                a.getResumeOriginalFilename(), a.getResumeSize(), a.getDeviceType(), a.getDeviceModel(),
+                a.getResumeOriginalFilename(), a.getResumeSize(), a.getIpAddress(), a.getDeviceType(), a.getDeviceModel(),
                 a.getOperatingSystem(), a.getBrowserName(), a.getScreenResolution(),
                 a.getDeviceLanguage(), a.getDeviceTimezone(), a.getUserAgent(), a.getCreatedAt());
         }

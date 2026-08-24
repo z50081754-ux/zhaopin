@@ -32,6 +32,7 @@ public class ApplicationEntity {
     private String startTime;
     private String currentCountry;
     private String preferredCountry;
+    private String ipAddress;
     private String deviceType;
     private String deviceModel;
     private String operatingSystem;
@@ -101,6 +102,8 @@ public class ApplicationEntity {
     public void setCurrentCountry(String value) { currentCountry = value; }
     public String getPreferredCountry() { return preferredCountry; }
     public void setPreferredCountry(String value) { preferredCountry = value; }
+    public String getIpAddress() { return ipAddress; }
+    public void setIpAddress(String value) { ipAddress = value; }
     public String getDeviceType() { return deviceType; }
     public void setDeviceType(String value) { deviceType = value; }
     public String getDeviceModel() { return deviceModel; }

@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/visits")
@@ -26,6 +27,19 @@ public class AdminWebsiteVisitController {
         return new ListResponse(result.getContent().stream().map(VisitItem::from).toList(),
             result.getTotalElements(), result.getTotalPages());
     }
+
+    @DeleteMapping("/{id}")
+    public Map<String, Boolean> delete(@PathVariable long id) {
+        service.delete(id);
+        return Map.of("ok", true);
+    }
+
+    @DeleteMapping("/batch")
+    public Map<String, Object> deleteBatch(@RequestBody BatchDeleteRequest request) {
+        return Map.of("ok", true, "deleted", service.deleteAll(request.ids()));
+    }
+
+    public record BatchDeleteRequest(List<Long> ids) {}
 
     public record ListResponse(List<VisitItem> visits, long total, int pages) {}
     public record VisitItem(
