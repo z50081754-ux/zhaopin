@@ -16,12 +16,21 @@ public class WebsiteVisitService {
     }
 
     @Transactional
-    public WebsiteVisitEntity qualify(VisitRequest request, String ipAddress) {
+    public synchronized QualifyResult qualify(VisitRequest request, String ipAddress) {
         validateVisitId(request.visitId());
         int duration = boundedDuration(request.durationSeconds());
         if (duration < 15) throw new IllegalArgumentException("Visit must be at least 15 seconds.");
         Instant now = Instant.now();
-        WebsiteVisitEntity visit = repository.findByVisitId(request.visitId()).orElseGet(WebsiteVisitEntity::new);
+        WebsiteVisitEntity visit = repository.findByVisitId(request.visitId()).orElse(null);
+        if (visit == null) {
+            String cleanIpAddress = clean(ipAddress, 64);
+            String cleanTimezone = clean(request.deviceTimezone(), 120);
+            if (!cleanIpAddress.isBlank() && !cleanTimezone.isBlank()
+                && repository.findFirstByIpAddressAndDeviceTimezone(cleanIpAddress, cleanTimezone).isPresent()) {
+                return new QualifyResult(false, true);
+            }
+            visit = new WebsiteVisitEntity();
+        }
         if (visit.getVisitId() == null) {
             visit.setVisitId(request.visitId());
             visit.setStartedAt(now.minusSeconds(duration));
@@ -40,7 +49,8 @@ public class WebsiteVisitService {
         visit.setDurationSeconds(Math.max(visit.getDurationSeconds(), duration));
         visit.setLastPath(clean(request.lastPath(), 500));
         visit.setLastSeenAt(now);
-        return repository.save(visit);
+        repository.save(visit);
+        return new QualifyResult(true, false);
     }
 
     @Transactional
@@ -75,4 +85,5 @@ public class WebsiteVisitService {
         String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent
     ) {}
     public record HeartbeatRequest(int durationSeconds, String lastPath) {}
+    public record QualifyResult(boolean tracked, boolean duplicate) {}
 }

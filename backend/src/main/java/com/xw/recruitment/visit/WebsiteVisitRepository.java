@@ -8,5 +8,6 @@ import java.util.Optional;
 
 public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity, Long> {
     Optional<WebsiteVisitEntity> findByVisitId(String visitId);
+    Optional<WebsiteVisitEntity> findFirstByIpAddressAndDeviceTimezone(String ipAddress, String deviceTimezone);
     Page<WebsiteVisitEntity> findAllByOrderByQualifiedAtDesc(Pageable pageable);
 }

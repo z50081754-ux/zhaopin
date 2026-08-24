@@ -24,6 +24,8 @@ export function useVisitTracking() {
   let timer: number | undefined;
   let seconds = Number(sessionStorage.getItem(VISIT_SECONDS_KEY) || 0);
   let qualified = seconds >= QUALIFIED_SECONDS;
+  let qualifying = false;
+  let duplicate = false;
   let lastSent = qualified ? seconds : 0;
   const id = visitId();
   const entryPath = sessionStorage.getItem(VISIT_ENTRY_KEY) || currentPath();
@@ -37,16 +39,25 @@ export function useVisitTracking() {
       keepalive,
     }).catch(() => undefined);
 
-  const qualify = () => {
-    qualified = true;
+  const qualify = async () => {
+    if (qualifying || duplicate) return;
+    qualifying = true;
     lastSent = seconds;
-    return post("/api/visits", {
-      visitId: id,
-      durationSeconds: seconds,
-      entryPath,
-      lastPath: currentPath(),
-      ...collectDeviceInfo(),
-    });
+    try {
+      const response = await post("/api/visits", {
+        visitId: id,
+        durationSeconds: seconds,
+        entryPath,
+        lastPath: currentPath(),
+        ...collectDeviceInfo(),
+      });
+      if (!response?.ok) return;
+      const result = (await response.json()) as { tracked?: boolean; duplicate?: boolean };
+      duplicate = result.duplicate === true;
+      qualified = result.tracked === true;
+    } finally {
+      qualifying = false;
+    }
   };
 
   const heartbeat = (keepalive = false) => {
@@ -62,7 +73,7 @@ export function useVisitTracking() {
     if (document.visibilityState !== "visible") return;
     seconds += 1;
     sessionStorage.setItem(VISIT_SECONDS_KEY, String(seconds));
-    if (!qualified && seconds >= QUALIFIED_SECONDS) void qualify();
+    if (!qualified && !duplicate && seconds >= QUALIFIED_SECONDS) void qualify();
     else if (qualified && seconds - lastSent >= HEARTBEAT_SECONDS) void heartbeat();
   };
 

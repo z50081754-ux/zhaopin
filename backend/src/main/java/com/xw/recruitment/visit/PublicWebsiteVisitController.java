@@ -22,8 +22,8 @@ public class PublicWebsiteVisitController {
         @RequestBody WebsiteVisitService.VisitRequest request,
         HttpServletRequest httpRequest
     ) {
-        service.qualify(request, regionResolver.ipAddress(httpRequest));
-        return Map.of("ok", true);
+        WebsiteVisitService.QualifyResult result = service.qualify(request, regionResolver.ipAddress(httpRequest));
+        return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
     }
 
     @PostMapping("/{visitId}/heartbeat")
