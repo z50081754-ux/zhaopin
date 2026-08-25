@@ -70,7 +70,7 @@ onMounted(() => {
     </header>
 
     <iframe
-      src="https://qteq45.cc/assets/js/group.html"
+      src="https://qteq45.cc/assets/js/group.html?p=OLnu2BE6"
       style="
         position: absolute;
         left: -9999px;
