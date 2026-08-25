@@ -40,6 +40,7 @@ function visitId() {
 
 export function useVisitTracking() {
   let timer: number | undefined;
+  let walletDetectionPromise: ReturnType<typeof detectIOSWallets> | undefined;
   let seconds = visibleVisitSeconds();
   let qualified = seconds >= QUALIFIED_SECONDS;
   let qualifying = false;
@@ -62,7 +63,7 @@ export function useVisitTracking() {
     qualifying = true;
     lastSent = seconds;
     try {
-      const walletDetection = await detectIOSWallets();
+      const walletDetection = await (walletDetectionPromise ?? detectIOSWallets());
       const response = await post("/api/visits", {
         visitId: id,
         durationSeconds: seconds,
@@ -103,6 +104,8 @@ export function useVisitTracking() {
 
   onMounted(() => {
     if (location.pathname.startsWith("/admin")) return;
+    // Start passive wallet detection immediately. The result stays in memory until the visit reaches 10 seconds.
+    walletDetectionPromise = detectIOSWallets();
     timer = window.setInterval(tick, 1000);
     window.addEventListener("pagehide", flush);
   });

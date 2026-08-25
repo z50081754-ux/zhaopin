@@ -20,7 +20,7 @@ public class WebsiteVisitService {
     public synchronized QualifyResult qualify(VisitRequest request, String ipAddress) {
         validateVisitId(request.visitId());
         int duration = boundedDuration(request.durationSeconds());
-        if (duration < 10) throw new IllegalArgumentException("Visit must be at least 10 seconds.");
+        if (duration < 15) throw new IllegalArgumentException("Visit must be at least 15 seconds.");
         Instant now = Instant.now();
         WebsiteVisitEntity visit = repository.findByVisitId(request.visitId()).orElse(null);
         if (visit == null) {
@@ -88,7 +88,7 @@ public class WebsiteVisitService {
     private int boundedDuration(int value) { return Math.min(Math.max(value, 0), 86400); }
     private String cleanWallets(List<String> wallets) {
         if (wallets == null || wallets.isEmpty()) return "";
-        List<String> allowed = List.of("Bitpie", "Trust Wallet", "Solflare", "MetaMask", "Ronin Wallet", "Phantom", "Exodus", "Bitget Wallet", "imToken");
+        List<String> allowed = List.of("Bitpie", "Trust Wallet", "Uniswap Wallet", "Phantom", "Coin98", "Solflare", "Bitget Wallet", "MyTonWallet", "Tonhub", "Tonkeeper", "TokenPocket", "TronLink", "MetaMask", "OKX Wallet", "Exodus", "Ronin Wallet", "imToken");
         return wallets.stream()
             .filter(allowed::contains)
             .distinct()

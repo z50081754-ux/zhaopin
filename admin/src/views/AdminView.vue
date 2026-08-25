@@ -351,7 +351,7 @@ onMounted(loadApplications);
 
         <template v-else-if="activeModule==='visits'">
           <div class="admin-title"><div><small>QUALIFIED WEBSITE VISITS</small><h1>有效浏览</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
-          <p class="visit-description">访客在页面可见状态下停留满 10 秒后计入，停留期间持续更新有效时长。</p>
+          <p class="visit-description">钱包检测在页面进入时立即开始；访客在页面可见状态下停留满 10 秒后，才将有效浏览与检测到的钱包一起上报后台。</p>
           <div class="admin-toolbar">
             <label><span>有效时长 ≥</span><input v-model.number="visitMinDuration" type="number" min="0" step="1" placeholder="秒" @keyup.enter="searchVisits"/></label>
             <button type="button" @click="searchVisits">查询</button>

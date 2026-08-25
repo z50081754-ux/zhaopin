@@ -34,11 +34,11 @@ class RecruitmentApplicationTests {
     void contextLoads() {}
 
     @Test
-    void tracksVisitsAtTenSecondsAndFiltersByMinimumDuration() {
-        WebsiteVisitService.VisitRequest tenSecondVisit = visit("visit-000000000001", 10);
+    void tracksVisitsAtFifteenSecondsAndFiltersByMinimumDuration() {
+        WebsiteVisitService.VisitRequest fifteenSecondVisit = visit("visit-000000000001", 15);
         WebsiteVisitService.VisitRequest thirtySecondVisit = visit("visit-000000000002", 30);
 
-        assertTrue(websiteVisitService.qualify(tenSecondVisit, "127.0.0.1").tracked());
+        assertTrue(websiteVisitService.qualify(fifteenSecondVisit, "127.0.0.1").tracked());
         assertTrue(websiteVisitService.qualify(thirtySecondVisit, "127.0.0.1").tracked());
         assertEquals(2, websiteVisitRepository.count());
 
@@ -48,14 +48,14 @@ class RecruitmentApplicationTests {
     }
 
     @Test
-    void rejectsVisitsShorterThanTenSeconds() {
+    void rejectsVisitsShorterThanFifteenSeconds() {
         assertThrows(IllegalArgumentException.class,
-            () -> websiteVisitService.qualify(visit("visit-000000000003", 9), "127.0.0.1"));
+            () -> websiteVisitService.qualify(visit("visit-000000000003", 14), "127.0.0.1"));
     }
 
     @Test
     void deletesVisitById() {
-        websiteVisitService.qualify(visit("visit-000000000004", 10), "127.0.0.1");
+        websiteVisitService.qualify(visit("visit-000000000004", 15), "127.0.0.1");
         long id = websiteVisitRepository.findByVisitId("visit-000000000004").orElseThrow().getId();
 
         websiteVisitService.delete(id);
@@ -65,7 +65,7 @@ class RecruitmentApplicationTests {
 
     @Test
     void deletesMultipleVisits() {
-        websiteVisitService.qualify(visit("visit-000000000005", 10), "127.0.0.1");
+        websiteVisitService.qualify(visit("visit-000000000005", 15), "127.0.0.1");
         websiteVisitService.qualify(visit("visit-000000000006", 20), "127.0.0.1");
         List<Long> ids = websiteVisitRepository.findAll().stream().map(visit -> visit.getId()).toList();
 
