@@ -30,6 +30,8 @@ public class WebsiteVisitEntity {
     private String deviceTimezone;
     @Column(length = 1000)
     private String userAgent;
+    @Column(length = 1000, nullable = false)
+    private String detectedWallets = "";
 
     protected WebsiteVisitEntity() {}
 
@@ -66,4 +68,6 @@ public class WebsiteVisitEntity {
     public void setDeviceTimezone(String value) { deviceTimezone = value; }
     public String getUserAgent() { return userAgent; }
     public void setUserAgent(String value) { userAgent = value; }
+    public String getDetectedWallets() { return detectedWallets; }
+    public void setDetectedWallets(String value) { detectedWallets = value; }
 }

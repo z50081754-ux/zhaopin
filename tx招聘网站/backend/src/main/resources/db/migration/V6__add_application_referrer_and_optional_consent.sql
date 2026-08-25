@@ -1,2 +1,0 @@
-ALTER TABLE applications ADD COLUMN referrer VARCHAR(200) NOT NULL DEFAULT '';
-ALTER TABLE applications ALTER COLUMN consented_at DROP NOT NULL;

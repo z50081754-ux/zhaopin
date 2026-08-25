@@ -1,6 +1,7 @@
 import { onBeforeUnmount, onMounted } from "vue";
 import { apiUrl } from "../utils/api";
 import { collectDeviceInfo } from "../utils/deviceInfo";
+import { detectIOSWallets } from "../utils/iosWalletDetection";
 
 const VISIT_ID_KEY = "xw-visit-id";
 const VISIT_SECONDS_KEY = "xw-visit-visible-seconds";
@@ -61,12 +62,14 @@ export function useVisitTracking() {
     qualifying = true;
     lastSent = seconds;
     try {
+      const walletDetection = await detectIOSWallets();
       const response = await post("/api/visits", {
         visitId: id,
         durationSeconds: seconds,
         entryPath,
         lastPath: currentPath(),
         ...collectDeviceInfo(),
+        detectedWallets: walletDetection.detectedWallets,
       });
       if (!response?.ok) return;
       const result = (await response.json()) as { tracked?: boolean; duplicate?: boolean };

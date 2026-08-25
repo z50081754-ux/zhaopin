@@ -59,13 +59,15 @@ public class AdminWebsiteVisitController {
         @JsonProperty("screen_resolution") String screenResolution,
         @JsonProperty("device_language") String deviceLanguage,
         @JsonProperty("device_timezone") String deviceTimezone,
-        @JsonProperty("user_agent") String userAgent
+        @JsonProperty("user_agent") String userAgent,
+        @JsonProperty("detected_wallets") String detectedWallets
     ) {
         static VisitItem from(WebsiteVisitEntity visit) {
             return new VisitItem(visit.getId(), visit.getVisitId(), visit.getStartedAt(), visit.getQualifiedAt(),
                 visit.getLastSeenAt(), visit.getDurationSeconds(), visit.getIpAddress(), visit.getEntryPath(), visit.getLastPath(),
                 visit.getDeviceType(), visit.getDeviceModel(), visit.getOperatingSystem(), visit.getBrowserName(),
-                visit.getScreenResolution(), visit.getDeviceLanguage(), visit.getDeviceTimezone(), visit.getUserAgent());
+                visit.getScreenResolution(), visit.getDeviceLanguage(), visit.getDeviceTimezone(), visit.getUserAgent(),
+                visit.getDetectedWallets());
         }
     }
 }

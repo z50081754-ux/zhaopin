@@ -1,1 +1,0 @@
-ALTER TABLE jobs ADD COLUMN recruitment_count INTEGER NOT NULL DEFAULT 0;

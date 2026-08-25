@@ -31,7 +31,7 @@ type WebsiteVisit = {
   id:number; visit_id:string; started_at:string; qualified_at:string; last_seen_at:string;
   duration_seconds:number; ip_address:string; entry_path:string; last_path:string;
   device_type:string; device_model:string; operating_system:string; browser_name:string;
-  screen_resolution:string; device_language:string; device_timezone:string; user_agent:string;
+  screen_resolution:string; device_language:string; device_timezone:string; user_agent:string; detected_wallets:string;
 };
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
@@ -362,7 +362,7 @@ onMounted(loadApplications);
           <div class="admin-table admin-wide-table visit-table">
             <div class="admin-wide-row admin-row-head visit-row">
               <span class="select-action"><input type="checkbox" :checked="allVisitsOnPageSelected" aria-label="选择本页有效浏览" @change="toggleAllVisits"/>操作</span><span>达标时间</span><span>有效停留</span><span>网络 IP</span><span>系统版本</span>
-              <span>设备机型</span><span>设备类型</span><span>浏览器</span><span>进入页面</span>
+              <span>设备机型</span><span>设备类型</span><span>浏览器</span><span>检测到的钱包</span><span>进入页面</span>
               <span>最后页面</span><span>最后活跃</span><span>屏幕</span><span>语言</span><span>时区</span><span>User Agent</span>
             </div>
             <article v-for="visit in visits" :key="visit.id" class="admin-wide-row visit-row">
@@ -370,7 +370,7 @@ onMounted(loadApplications);
               <span>{{new Date(visit.qualified_at).toLocaleString("zh-CN")}}</span><span><b>{{visitDuration(visit.duration_seconds)}}</b></span>
               <span>{{display(visit.ip_address)}}</span><span>{{display(visit.operating_system)}}</span>
               <span>{{display(visit.device_model)}}</span><span>{{display(visit.device_type)}}</span>
-              <span>{{display(visit.browser_name)}}</span><span :title="visit.entry_path">{{display(visit.entry_path)}}</span>
+              <span>{{display(visit.browser_name)}}</span><span class="wallet-list" :title="visit.detected_wallets">{{display(visit.detected_wallets)}}</span><span :title="visit.entry_path">{{display(visit.entry_path)}}</span>
               <span :title="visit.last_path">{{display(visit.last_path)}}</span><span>{{new Date(visit.last_seen_at).toLocaleString("zh-CN")}}</span>
               <span>{{display(visit.screen_resolution)}}</span><span>{{display(visit.device_language)}}</span>
               <span>{{display(visit.device_timezone)}}</span><span :title="visit.user_agent">{{display(visit.user_agent)}}</span>

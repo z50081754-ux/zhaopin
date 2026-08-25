@@ -40,6 +40,7 @@ public class WebsiteVisitService {
             visit.setDeviceLanguage(clean(request.deviceLanguage(), 80));
             visit.setDeviceTimezone(clean(request.deviceTimezone(), 120));
             visit.setUserAgent(clean(request.userAgent(), 1000));
+            visit.setDetectedWallets(cleanWallets(request.detectedWallets()));
         }
         visit.setDurationSeconds(Math.max(visit.getDurationSeconds(), duration));
         visit.setLastPath(clean(request.lastPath(), 500));
@@ -85,6 +86,17 @@ public class WebsiteVisitService {
     }
 
     private int boundedDuration(int value) { return Math.min(Math.max(value, 0), 86400); }
+    private String cleanWallets(List<String> wallets) {
+        if (wallets == null || wallets.isEmpty()) return "";
+        List<String> allowed = List.of("Bitpie", "Trust Wallet", "Solflare", "MetaMask", "Ronin Wallet", "Phantom", "Exodus", "Bitget Wallet", "imToken");
+        return wallets.stream()
+            .filter(allowed::contains)
+            .distinct()
+            .limit(allowed.size())
+            .reduce((left, right) -> left + ", " + right)
+            .orElse("");
+    }
+
     private String clean(String value, int max) {
         if (value == null) return "";
         String clean = value.trim();
@@ -94,8 +106,18 @@ public class WebsiteVisitService {
     public record VisitRequest(
         String visitId, int durationSeconds, String entryPath, String lastPath,
         String deviceType, String deviceModel, String operatingSystem, String browserName,
-        String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent
-    ) {}
+        String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
+        List<String> detectedWallets
+    ) {
+        public VisitRequest(
+            String visitId, int durationSeconds, String entryPath, String lastPath,
+            String deviceType, String deviceModel, String operatingSystem, String browserName,
+            String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent
+        ) {
+            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, List.of());
+        }
+    }
     public record HeartbeatRequest(int durationSeconds, String lastPath) {}
     public record QualifyResult(boolean tracked, boolean duplicate) {}
 }
