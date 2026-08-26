@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -60,10 +62,17 @@ public class WebsiteVisitService {
         return repository.save(visit);
     }
 
-    public Page<WebsiteVisitEntity> list(int page, int size, int minDurationSeconds) {
-        return repository.findAllByDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
-            Math.min(Math.max(minDurationSeconds, 0), 86400),
-            PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100))
+    public Page<WebsiteVisitEntity> list(int page, int size, int minDurationSeconds, boolean today) {
+        int safeDuration = Math.min(Math.max(minDurationSeconds, 0), 86400);
+        PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100));
+        if (!today) {
+            return repository.findAllByDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(safeDuration, pageable);
+        }
+        Instant bangkokTodayStart = LocalDate.now(ZoneId.of("Asia/Bangkok"))
+            .atStartOfDay(ZoneId.of("Asia/Bangkok"))
+            .toInstant();
+        return repository.findAllByDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
+            safeDuration, bangkokTodayStart, pageable
         );
     }
 

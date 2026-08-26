@@ -25,6 +25,7 @@
 .admin-toolbar label>span{flex:none;font-size:11px;color:var(--green)}.admin-toolbar label.search-main>span{font-size:22px}.admin-toolbar input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ice);color-scheme:dark}
 .admin-toolbar select,.admin-toolbar button{border:1px solid var(--line);border-radius:4px;background:#081926;color:#b8ccd5;padding:0 13px}
 .admin-toolbar button{border-color:var(--green);background:var(--green);color:#06111d;font-weight:800;cursor:pointer}
+.admin-toolbar button.toolbar-filter{border-color:var(--line);background:#081926;color:#b8ccd5}.admin-toolbar button.toolbar-filter:hover,.admin-toolbar button.toolbar-filter.active{border-color:var(--green);background:rgba(109,255,180,.1);color:var(--green)}
 .admin-table{border:1px solid var(--line);background:rgba(6,20,31,.78);overflow-x:auto}
 .admin-scroll-tip{margin:0 0 10px;color:#6f909e;font:11px "DM Mono";text-align:right}
 .admin-wide-table{overscroll-behavior-x:contain;scrollbar-color:var(--green) #071723;scrollbar-width:thin}

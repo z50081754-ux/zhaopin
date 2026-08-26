@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,9 +43,23 @@ class RecruitmentApplicationTests {
         assertTrue(websiteVisitService.qualify(thirtySecondVisit, "127.0.0.1").tracked());
         assertEquals(2, websiteVisitRepository.count());
 
-        var filtered = websiteVisitService.list(0, 20, 20);
+        var filtered = websiteVisitService.list(0, 20, 20, false);
         assertEquals(1, filtered.getTotalElements());
         assertEquals(30, filtered.getContent().getFirst().getDurationSeconds());
+    }
+
+    @Test
+    void filtersVisitsToCurrentBangkokDay() {
+        websiteVisitService.qualify(visit("visit-000000000007", 15), "127.0.0.1");
+        websiteVisitService.qualify(visit("visit-000000000008", 15), "127.0.0.1");
+        var oldVisit = websiteVisitRepository.findByVisitId("visit-000000000007").orElseThrow();
+        oldVisit.setQualifiedAt(Instant.parse("2020-01-01T00:00:00Z"));
+        websiteVisitRepository.save(oldVisit);
+
+        var filtered = websiteVisitService.list(0, 20, 0, true);
+
+        assertEquals(1, filtered.getTotalElements());
+        assertEquals("visit-000000000008", filtered.getContent().getFirst().getVisitId());
     }
 
     @Test

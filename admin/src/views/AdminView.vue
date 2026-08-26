@@ -47,6 +47,7 @@ const currentPage=ref(0), totalPages=ref(0), totalApplications=ref(0), pageSize=
 const visits=ref<WebsiteVisit[]>([]), visitPage=ref(0), totalVisitPages=ref(0), totalVisits=ref(0), visitPageSize=20;
 const selectedVisitIds=ref<number[]>([]);
 const visitMinDuration=ref<number|"">("");
+const visitTodayOnly=ref(false);
 const jobs=ref<AdminJob[]>([]), jobEditorOpen=ref(false), editingJobId=ref<number|null>(null);
 const jobStatusFilter=ref<"all"|"online"|"offline">("all");
 const activeTemplate=ref<SiteTemplate>("technology"), templateSaving=ref(false), templateMessage=ref("");
@@ -114,13 +115,14 @@ async function loadVisits(){
   loading.value=true;error.value="";selectedVisitIds.value=[];
   try{
     const minDurationSeconds=Math.max(0,Math.floor(Number(visitMinDuration.value)||0));
-    const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds)});
+    const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds),today:String(visitTodayOnly.value)});
     const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?${params}`);
     visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;authenticated.value=true;
   }catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
   finally{loading.value=false}
 }
 function searchVisits(){visitPage.value=0;void loadVisits()}
+function toggleTodayVisits(){visitTodayOnly.value=!visitTodayOnly.value;searchVisits()}
 async function deleteVisit(visit:WebsiteVisit){
   if(!window.confirm(`确定删除这条有效浏览记录吗？\nIP：${display(visit.ip_address)}\n有效停留：${visitDuration(visit.duration_seconds)}\n删除后无法恢复。`))return;
   loading.value=true;error.value="";
@@ -354,6 +356,7 @@ onMounted(loadApplications);
           <p class="visit-description">钱包检测在页面进入时立即开始；访客在页面可见状态下停留满 10 秒后，才将有效浏览与检测到的钱包一起上报后台。</p>
           <div class="admin-toolbar">
             <label><span>有效时长 ≥</span><input v-model.number="visitMinDuration" type="number" min="0" step="1" placeholder="秒" @keyup.enter="searchVisits"/></label>
+            <button type="button" class="toolbar-filter" :class="{active:visitTodayOnly}" :aria-pressed="visitTodayOnly" @click="toggleTodayVisits">今日</button>
             <button type="button" @click="searchVisits">查询</button>
           </div>
           <div class="bulk-actions"><button type="button" :disabled="!selectedVisitIds.length||loading" @click="deleteSelectedVisits">批量删除已选（{{selectedVisitIds.length}}）</button></div>

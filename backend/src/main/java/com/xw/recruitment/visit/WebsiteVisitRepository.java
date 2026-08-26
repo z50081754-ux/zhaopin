@@ -5,11 +5,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
+import java.time.Instant;
 
 public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity, Long> {
     Optional<WebsiteVisitEntity> findByVisitId(String visitId);
     Page<WebsiteVisitEntity> findAllByDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
         int minDurationSeconds,
+        Pageable pageable
+    );
+    Page<WebsiteVisitEntity> findAllByDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
+        int minDurationSeconds,
+        Instant qualifiedFrom,
         Pageable pageable
     );
 }
