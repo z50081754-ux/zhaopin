@@ -14,8 +14,8 @@ public class AdminSiteSettingsController {
 
     @PutMapping
     public SiteSettingsResponse update(@RequestBody UpdateRequest request) {
-        return service.update(request.activeTemplate());
+        return service.update(request.activeTemplate(), request.defaultLanguage());
     }
 
-    public record UpdateRequest(String activeTemplate) {}
+    public record UpdateRequest(String activeTemplate, String defaultLanguage) {}
 }

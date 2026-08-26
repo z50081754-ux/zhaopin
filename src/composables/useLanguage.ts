@@ -4,12 +4,14 @@ import { apiUrl } from "../utils/api";
 export type Language = "zh" | "en";
 
 const saved = typeof localStorage !== "undefined" ? localStorage.getItem("xw-language") : null;
+const hasSavedLanguage = saved === "zh" || saved === "en";
 const language = ref<Language>(saved === "zh" || saved === "en" ? saved : "en");
 let regionInitialization: Promise<void> | null = null;
 let manuallyChangedThisVisit = false;
 
 async function initializeLanguageByRegion() {
   if (typeof window === "undefined") return;
+  if (hasSavedLanguage) return;
   if (regionInitialization) return regionInitialization;
 
   regionInitialization = fetch(apiUrl("/api/locale"), { headers: { Accept: "application/json" } })

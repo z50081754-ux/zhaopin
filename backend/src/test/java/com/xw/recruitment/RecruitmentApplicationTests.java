@@ -2,6 +2,8 @@ package com.xw.recruitment;
 
 import com.xw.recruitment.visit.WebsiteVisitRepository;
 import com.xw.recruitment.visit.WebsiteVisitService;
+import com.xw.recruitment.site.SiteSettingsRepository;
+import com.xw.recruitment.site.SiteSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,9 +28,16 @@ class RecruitmentApplicationTests {
     @Autowired
     private WebsiteVisitRepository websiteVisitRepository;
 
+    @Autowired
+    private SiteSettingsService siteSettingsService;
+
+    @Autowired
+    private SiteSettingsRepository siteSettingsRepository;
+
     @BeforeEach
     void clearVisits() {
         websiteVisitRepository.deleteAll();
+        siteSettingsRepository.deleteAll();
     }
 
     @Test
@@ -60,6 +69,19 @@ class RecruitmentApplicationTests {
 
         assertEquals(1, filtered.getTotalElements());
         assertEquals("visit-000000000008", filtered.getContent().getFirst().getVisitId());
+    }
+
+    @Test
+    void resolvesInitialLanguageFromAdminSettingBeforeVisitorCountry() {
+        siteSettingsService.update("apple", "zh");
+        assertEquals("zh", siteSettingsService.resolveInitialLanguage("US"));
+
+        siteSettingsService.update("apple", "en");
+        assertEquals("en", siteSettingsService.resolveInitialLanguage("CN"));
+
+        siteSettingsService.update("apple", "auto");
+        assertEquals("zh", siteSettingsService.resolveInitialLanguage("CN"));
+        assertEquals("en", siteSettingsService.resolveInitialLanguage("TH"));
     }
 
     @Test

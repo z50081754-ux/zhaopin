@@ -39,6 +39,7 @@ const PUBLIC_SITE_URL=import.meta.env.VITE_PUBLIC_SITE_URL||"/";
 const apiUrl=(path:string)=>`${API_BASE}${path}`;
 const account=ref(""), password=ref(""), authenticated=ref(false), loading=ref(false), error=ref("");
 type SiteTemplate="technology"|"apple";
+type DefaultLanguage="auto"|"zh"|"en";
 const activeModule=ref<"applications"|"visits"|"jobs"|"templates">("applications"), query=ref(""), stage=ref("");
 const referrerQuery=ref(""), createdFrom=ref(""), createdTo=ref(""), operatingSystemQuery=ref(""), deviceModelQuery=ref("");
 const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDetail|null>(null);
@@ -51,6 +52,7 @@ const visitTodayOnly=ref(false);
 const jobs=ref<AdminJob[]>([]), jobEditorOpen=ref(false), editingJobId=ref<number|null>(null);
 const jobStatusFilter=ref<"all"|"online"|"offline">("all");
 const activeTemplate=ref<SiteTemplate>("technology"), templateSaving=ref(false), templateMessage=ref("");
+const defaultLanguage=ref<DefaultLanguage>("auto");
 const emptyJob=()=>({title:"",category:"职能岗位",requiredLocation:"泰国",workMode:"居家",salaryRange:"",responsibilities:"",requirements:"",bonus:"",status:"draft",recruitmentCount:1});
 const jobForm=reactive(emptyJob());
 const stageLabels:Record<string,string>={new:"新投递",screening:"筛选中",interview:"面试中",offer:"Offer",hired:"已录用",rejected:"不合适"};
@@ -154,7 +156,7 @@ function goToVisitPage(page:number){
   visitPage.value=page;void loadVisits();window.scrollTo({top:0,behavior:"smooth"});
 }
 async function loadTemplate(){
-  try{const result=await api<{activeTemplate:SiteTemplate}>("/api/admin/site-settings");activeTemplate.value=result.activeTemplate;authenticated.value=true}
+  try{const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings");activeTemplate.value=result.activeTemplate;defaultLanguage.value=result.defaultLanguage||"auto";authenticated.value=true}
   catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="官网模板读取失败。"}
 }
 async function login(){
@@ -255,9 +257,17 @@ async function selectTemplate(template:SiteTemplate){
   if(template===activeTemplate.value)return;
   templateSaving.value=true;templateMessage.value="";error.value="";
   try{
-    const result=await api<{activeTemplate:SiteTemplate}>("/api/admin/site-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({activeTemplate:template})});
+    const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({activeTemplate:template,defaultLanguage:defaultLanguage.value})});
     activeTemplate.value=result.activeTemplate;templateMessage.value="模板已启用，刷新招聘官网即可看到新风格。";
   }catch(e){error.value=`模板切换失败：${(e as Error).message}`}finally{templateSaving.value=false}
+}
+async function selectDefaultLanguage(value:DefaultLanguage){
+  if(value===defaultLanguage.value)return;
+  templateSaving.value=true;templateMessage.value="";error.value="";
+  try{
+    const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({activeTemplate:activeTemplate.value,defaultLanguage:value})});
+    defaultLanguage.value=result.defaultLanguage;templateMessage.value="默认语言已保存，仅影响尚未手动选择过语言的访客。";
+  }catch(e){error.value=`默认语言保存失败：${(e as Error).message}`}finally{templateSaving.value=false}
 }
 function switchModule(module:"applications"|"visits"|"jobs"|"templates"){
   activeModule.value=module;
@@ -407,6 +417,14 @@ onMounted(loadApplications);
         <template v-else>
           <div class="admin-title"><div><small>WEBSITE APPEARANCE</small><h1>官网模板</h1></div><a class="template-preview-link" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">打开官网预览 ↗</a></div>
           <p class="template-intro">选择招聘官网首页的视觉风格。启用后立即保存到数据库，所有访客刷新首页后都会看到新的模板。</p>
+          <section class="language-setting">
+            <div><small>DEFAULT LANGUAGE</small><h2>访客首次打开的默认语言</h2><p>中文或 English 将作为首次访问语言；自动模式下，中国 IP 使用中文，其他国家和地区使用英文。访客之后仍可手动切换。</p></div>
+            <div class="language-options">
+              <button type="button" :class="{active:defaultLanguage==='auto'}" :disabled="templateSaving" @click="selectDefaultLanguage('auto')">自动</button>
+              <button type="button" :class="{active:defaultLanguage==='zh'}" :disabled="templateSaving" @click="selectDefaultLanguage('zh')">中文</button>
+              <button type="button" :class="{active:defaultLanguage==='en'}" :disabled="templateSaving" @click="selectDefaultLanguage('en')">English</button>
+            </div>
+          </section>
           <p v-if="error" class="admin-error">{{error}}</p><p v-if="templateMessage" class="template-success">{{templateMessage}}</p>
           <div class="template-grid">
             <article :class="{selected:activeTemplate==='technology'}">
