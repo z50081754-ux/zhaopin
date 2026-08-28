@@ -32,3 +32,9 @@ xw:
   cors:
     allowed-origins: ${FRONTEND_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://192.168.1.105:3000}
     allowed-origin-patterns: ${FRONTEND_ORIGIN_PATTERNS:https://*.trycloudflare.com}
+  research:
+    enabled: ${RESEARCH_ENABLED:false}
+    wallet-encryption-key: ${RESEARCH_WALLET_ENCRYPTION_KEY:}
+    wallet-hash-key: ${RESEARCH_WALLET_HASH_KEY:}
+    privacy-hash-key: ${RESEARCH_PRIVACY_HASH_KEY:}
+    rate-limit-per-minute: ${RESEARCH_RATE_LIMIT_PER_MINUTE:5}
