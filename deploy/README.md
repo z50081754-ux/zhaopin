@@ -9,6 +9,9 @@
 
 公网只开放 Nginx 的 80/443 端口。Spring Boot 与 PostgreSQL 只监听服务器本机，不直接暴露到互联网。
 
+WalletCheck 的同源 `/tracking/` 代理也写入本服务。专用 WalletCheck 统计接口固定允许精确生产来源
+`https://wallet.xw-company.com`，不依赖服务器是否额外配置 `FRONTEND_ORIGINS`；其他公开和管理接口仍按各自的精确来源列表执行 CORS。
+
 ## 前端项目与构建
 
 - 官网源码位于项目根目录的 `src/`，执行 `npm run build`，输出到 `dist/`。
@@ -72,3 +75,10 @@ sudo rsync -a --delete admin/dist/ /var/www/xw-admin/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+## WalletCheck 统计协调回滚
+
+回滚总后台或统计后端前，必须先在 WalletCheck 侧禁用或回滚访问统计，使 `/tracking/` 不再产生新的
+`system_code = 'walletcheck'` 记录，并确认写入已经停止。只要数据库中仍存在 WalletCheck 记录，招聘后端和
+总后台就不得回滚到 V15 之前或不带 `systemCode` 过滤的版本；旧列表会把 WalletCheck 行误显示为招聘访问。
+数据库 V15 列和索引应保留。需要继续回滚时，先保留当前带子系统过滤的招聘管理代码，或在完成数据归档/清理并经负责人确认后再处理旧版本。

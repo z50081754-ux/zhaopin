@@ -129,16 +129,40 @@ class RecruitmentApplicationTests {
     }
 
     @Test
-    void preservesNonWalletPaths() {
-        String visitId = "visit-walletcheck-0003";
-        websiteVisitService.qualify(VisitSystem.WALLETCHECK,
+    void preservesRecruitmentPathsForBackwardCompatibility() {
+        String visitId = "visit-recruitment-0004";
+        websiteVisitService.qualify(VisitSystem.RECRUITMENT,
             visit(visitId, 15, false, "/jobs?location=bangkok", "/about/team"), "127.0.0.1");
-        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, visitId,
+        websiteVisitService.heartbeat(VisitSystem.RECRUITMENT, visitId,
             new WebsiteVisitService.HeartbeatRequest(16, "/jobs/123?tab=description", false));
 
         var stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
         assertEquals("/jobs?location=bangkok", stored.getEntryPath());
         assertEquals("/jobs/123?tab=description", stored.getLastPath());
+    }
+
+    @Test
+    void storesOnlySafeShapesForWalletCheckPaths() {
+        String visitId = "visit-walletcheck-0003";
+        websiteVisitService.qualify(VisitSystem.WALLETCHECK,
+            visit(visitId, 15, false,
+                "/analyze?address=0xSecret#fragment",
+                "/WALLET/0xSecret?tab=overview"),
+            "127.0.0.1");
+
+        var stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
+        assertEquals("/analyze", stored.getEntryPath());
+        assertEquals("/wallet/:address", stored.getLastPath());
+
+        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, visitId,
+            new WebsiteVisitService.HeartbeatRequest(16, "/wallet%2F0xEncoded?tab=history", false));
+        stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
+        assertEquals("/wallet/:address", stored.getLastPath());
+
+        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, visitId,
+            new WebsiteVisitService.HeartbeatRequest(17, "/unexpected/0xSecret?address=0xSecret", false));
+        stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
+        assertEquals("/", stored.getLastPath());
     }
 
     @Test

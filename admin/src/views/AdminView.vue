@@ -50,6 +50,8 @@ const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDe
 const selectedApplicationIds=ref<number[]>([]);
 const currentPage=ref(0), totalPages=ref(0), totalApplications=ref(0), pageSize=20;
 const visits=ref<WebsiteVisit[]>([]), visitPage=ref(0), totalVisitPages=ref(0), totalVisits=ref(0), visitPageSize=20;
+const visitsSystem=ref<"recruitment"|"walletcheck"|null>(null);
+let visitRequestSequence=0;
 const selectedVisitIds=ref<number[]>([]);
 const visitMinDuration=ref<number|"">("");
 const visitTodayOnly=ref(false);
@@ -118,15 +120,23 @@ async function loadJobs(){
   finally{loading.value=false}
 }
 async function loadVisits(system:AdminSystem=activeSystem.value){
+  const requestedSystem=system==="walletcheck"?"walletcheck":"recruitment";
+  const requestId=++visitRequestSequence;
+  if(visitsSystem.value!==requestedSystem){
+    visits.value=[];totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
+    visitsSystem.value=requestedSystem;
+  }
   loading.value=true;error.value="";selectedVisitIds.value=[];
   try{
     const minDurationSeconds=Math.max(0,Math.floor(Number(visitMinDuration.value)||0));
     const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds),today:String(visitTodayOnly.value)});
-    params.set("systemCode",system==="walletcheck"?"walletcheck":"recruitment");
+    params.set("systemCode",requestedSystem);
     const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?${params}`);
+    const currentSystem=activeSystem.value==="walletcheck"?"walletcheck":activeSystem.value==="recruitment"&&activeModule.value==="visits"?"recruitment":null;
+    if(requestId!==visitRequestSequence||currentSystem!==requestedSystem)return;
     visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;authenticated.value=true;
-  }catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
-  finally{loading.value=false}
+  }catch(e){if(requestId===visitRequestSequence&&(e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
+  finally{if(requestId===visitRequestSequence)loading.value=false}
 }
 function searchVisits(){visitPage.value=0;void loadVisits()}
 function toggleTodayVisits(){visitTodayOnly.value=!visitTodayOnly.value;searchVisits()}
@@ -166,7 +176,12 @@ async function loadTemplate(){
 }
 function loadVisibleSystem(system:AdminSystem){
   if(system==="walletcheck")return loadVisits(system);
-  if(system==="recruitment")return loadApplications();
+  if(system==="recruitment"){
+    if(activeModule.value==="visits")return loadVisits(system);
+    if(activeModule.value==="jobs")return loadJobs();
+    if(activeModule.value==="templates")return loadTemplate();
+    if(activeModule.value==="applications")return loadApplications();
+  }
   return Promise.resolve();
 }
 async function login(){
@@ -177,6 +192,16 @@ async function login(){
     if(activeSystem.value==="walletcheck")await loadVisibleSystem(activeSystem.value);
     else if(activeSystem.value==="recruitment")await Promise.all([loadApplications(),loadJobs(),loadTemplate()]);
   }catch{error.value="账号或密码错误，或后端服务尚未启动。"}finally{loading.value=false}
+}
+async function logout(){
+  loading.value=true;error.value="";
+  try{
+    const response=await fetch(apiUrl("/api/admin/logout"),{method:"POST",credentials:"include"});
+    if(!response.ok&&response.status!==401)throw new Error("REQUEST_FAILED");
+  }catch{error.value="退出登录失败，请稍后重试。";loading.value=false;return}
+  authenticated.value=false;account.value="";password.value="";applications.value=[];jobs.value=[];
+  visitRequestSequence++;visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;
+  activeSystem.value="home";window.history.pushState({},"",pathForAdminSystem("home"));loading.value=false;
 }
 async function openApplication(item:Application){
   try{selectedApplication.value=await api<ApplicationDetail>(`/api/admin/applications/${item.id}`)}
@@ -286,12 +311,19 @@ function switchModule(module:"applications"|"visits"|"jobs"|"templates"|"researc
   if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else if(module==="applications")void loadApplications();
 }
 function navigateSystem(system:AdminSystem){
+  if(activeSystem.value!==system){
+    visitRequestSequence++;visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
+  }
   activeSystem.value=system;
   window.history.pushState({},"",pathForAdminSystem(system));
   void loadVisibleSystem(system);
 }
 function syncSystemFromPath(){
-  activeSystem.value=parseAdminPath(window.location.pathname);
+  const system=parseAdminPath(window.location.pathname);
+  if(activeSystem.value!==system){
+    visitRequestSequence++;visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
+  }
+  activeSystem.value=system;
   void loadVisibleSystem(activeSystem.value);
 }
 onMounted(()=>{
@@ -315,7 +347,15 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
     </section>
 
     <template v-else>
-      <header class="admin-header"><div><XwLogo/><span>{{activeSystem==='home'?'系统管理':activeSystem==='walletcheck'?'WalletCheck':'招聘系统'}}</span></div><a :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a></header>
+      <header class="admin-header">
+        <div class="admin-brand"><XwLogo/><span>{{activeSystem==='home'?'系统管理':activeSystem==='walletcheck'?'WalletCheck':'招聘系统'}}</span></div>
+        <div class="admin-header-actions">
+          <button v-if="activeSystem!=='home'" type="button" data-testid="system-home" @click="navigateSystem('home')">← 返回系统首页</button>
+          <span v-if="account" data-testid="current-account">账号：{{account}}</span>
+          <a v-if="activeSystem!=='walletcheck'" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a>
+          <button type="button" data-testid="logout" @click="logout">退出登录</button>
+        </div>
+      </header>
       <section v-if="activeSystem==='home'" class="admin-main system-home">
         <div class="system-home-title"><small>SYSTEM MANAGEMENT</small><h1>系统管理</h1><p>选择要管理的业务系统。</p></div>
         <div class="system-entry-grid">
@@ -396,9 +436,9 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
         </template>
 
         <template v-else-if="activeModule==='visits'||activeSystem==='walletcheck'">
-          <button v-if="activeSystem==='walletcheck'" type="button" class="system-home-action" data-testid="system-home" @click="navigateSystem('home')">← 返回系统管理</button>
           <div class="admin-title"><div><small>{{activeSystem==='walletcheck'?'WALLETCHECK QUALIFIED VISITS':'QUALIFIED WEBSITE VISITS'}}</small><h1>{{activeSystem==='walletcheck'?'WalletCheck 有效浏览':'有效浏览'}}</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
-          <p class="visit-description">钱包检测在页面进入时立即开始；访客在页面可见状态下停留满 15 秒后，才将有效浏览与检测到的钱包一起上报后台。</p>
+          <p v-if="activeSystem==='walletcheck'" class="visit-description">WalletCheck 仅累计页面可见停留；满 15 秒后记录有效浏览，并以“查询过地址”展示地址查询转化。</p>
+          <p v-else class="visit-description">钱包检测在页面进入时立即开始；访客在页面可见状态下停留满 15 秒后，才将有效浏览与检测到的钱包一起上报后台。</p>
           <div class="admin-toolbar">
             <label><span>有效时长 ≥</span><input v-model.number="visitMinDuration" type="number" min="0" step="1" placeholder="秒" @keyup.enter="searchVisits"/></label>
             <button type="button" class="toolbar-filter" :class="{active:visitTodayOnly}" :aria-pressed="visitTodayOnly" @click="toggleTodayVisits">今日</button>
@@ -411,7 +451,7 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
             <div class="admin-wide-row admin-row-head visit-row" :class="{'walletcheck-visit-row':activeSystem==='walletcheck'}">
               <span class="select-action"><input type="checkbox" :checked="allVisitsOnPageSelected" aria-label="选择本页有效浏览" @change="toggleAllVisits"/>操作</span><span>达标时间</span><span>有效停留</span><span>网络 IP</span><span>系统版本</span>
               <span v-if="activeSystem==='walletcheck'">查询过地址</span>
-              <span>设备机型</span><span>设备类型</span><span>浏览器</span><span>检测到的钱包</span><span>进入页面</span>
+              <span>设备机型</span><span>设备类型</span><span>浏览器</span><span v-if="activeSystem==='recruitment'">检测到的钱包</span><span>进入页面</span>
               <span>最后页面</span><span>最后活跃</span><span>屏幕</span><span>语言</span><span>时区</span><span>User Agent</span>
             </div>
             <article v-for="visit in visits" :key="visit.id" class="admin-wide-row visit-row" :class="{'walletcheck-visit-row':activeSystem==='walletcheck'}">
@@ -420,7 +460,7 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
               <span>{{display(visit.ip_address)}}</span><span>{{display(visit.operating_system)}}</span>
               <span v-if="activeSystem==='walletcheck'"><b class="visit-boolean" :class="{yes:visit.queried_address}">{{visit.queried_address?'是':'否'}}</b></span>
               <span>{{display(visit.device_model)}}</span><span>{{display(visit.device_type)}}</span>
-              <span>{{display(visit.browser_name)}}</span><span class="wallet-list" :title="visit.detected_wallets">{{display(visit.detected_wallets)}}</span><span :title="visit.entry_path">{{display(visit.entry_path)}}</span>
+              <span>{{display(visit.browser_name)}}</span><span v-if="activeSystem==='recruitment'" class="wallet-list" :title="visit.detected_wallets">{{display(visit.detected_wallets)}}</span><span :title="visit.entry_path">{{display(visit.entry_path)}}</span>
               <span :title="visit.last_path">{{display(visit.last_path)}}</span><span>{{new Date(visit.last_seen_at).toLocaleString("zh-CN")}}</span>
               <span>{{display(visit.screen_resolution)}}</span><span>{{display(visit.device_language)}}</span>
               <span>{{display(visit.device_timezone)}}</span><span :title="visit.user_agent">{{display(visit.user_agent)}}</span>

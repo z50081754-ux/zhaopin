@@ -11,7 +11,7 @@
 Bitpie、Trust Wallet、Solflare、MetaMask、Ronin Wallet、Phantom、Exodus、Bitget Wallet、imToken。
 
 ## 触发规则
-仍沿用原站规则：页面可见停留满 10 秒后才形成有效浏览。在有效浏览首次达标时进行一次被动 iOS 钱包环境检测，并与有效浏览记录一起提交。
+仍沿用原站规则：页面可见停留满 15 秒后才形成有效浏览。在有效浏览首次达标时进行一次被动 iOS 钱包环境检测，并与有效浏览记录一起提交。
 
 ## 隐私/权限边界
 检测代码不调用账户连接，不调用 `eth_requestAccounts`，不读取钱包地址、余额、助记词、私钥，不请求签名或交易。

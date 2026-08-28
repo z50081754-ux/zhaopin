@@ -7,6 +7,7 @@ import java.net.URISyntaxException;
 import java.time.Clock;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -108,9 +109,19 @@ public class SecurityConfig {
         existingPublicApi.setAllowedHeaders(List.of("Content-Type", "Authorization"));
         existingPublicApi.setAllowCredentials(true);
 
+        CorsConfiguration walletTracking = new CorsConfiguration();
+        walletTracking.setAllowedOrigins(Stream.concat(
+            exactPublicOrigins.stream(), Stream.of("https://wallet.xw-company.com")
+        ).distinct().toList());
+        walletTracking.setAllowedMethods(List.of("POST", "OPTIONS"));
+        walletTracking.setAllowedHeaders(List.of("Accept", "Content-Type"));
+        walletTracking.setAllowCredentials(false);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/research/**", publicResearch);
         source.registerCorsConfiguration("/api/admin/**", admin);
+        source.registerCorsConfiguration("/api/visits/walletcheck", walletTracking);
+        source.registerCorsConfiguration("/api/visits/walletcheck/**", walletTracking);
         source.registerCorsConfiguration("/api/**", existingPublicApi);
         return source;
     }

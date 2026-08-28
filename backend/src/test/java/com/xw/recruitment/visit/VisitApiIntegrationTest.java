@@ -2,8 +2,10 @@ package com.xw.recruitment.visit;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
@@ -92,13 +95,62 @@ class VisitApiIntegrationTest {
             .andExpect(jsonPath("$.visits[0].queried_address").value(true));
     }
 
+    @Test
+    void acceptsProductionWalletOriginForTrackingPosts() throws Exception {
+        mockMvc.perform(options("/api/visits/walletcheck")
+                .header(HttpHeaders.ORIGIN, "https://wallet.xw-company.com")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type"))
+            .andExpect(status().isOk())
+            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://wallet.xw-company.com"));
+
+        mockMvc.perform(post("/api/visits/walletcheck")
+                .header(HttpHeaders.ORIGIN, "https://wallet.xw-company.com")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(walletVisitJson("visit-wallet-origin-0001", 15, false)))
+            .andExpect(status().isOk())
+            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://wallet.xw-company.com"))
+            .andExpect(jsonPath("$.tracked").value(true));
+    }
+
+    @Test
+    void removesAddressBearingWalletCheckPathsAtThePublicEndpoint() throws Exception {
+        mockMvc.perform(post("/api/visits/walletcheck")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(walletVisitJson(
+                    "visit-wallet-privacy-0001",
+                    15,
+                    false,
+                    "/analyze?address=0xSecret#fragment",
+                    "/WALLET%2F0xSecret?tab=history"
+                )))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/visits")
+                .with(user("admin").roles("ADMIN"))
+                .param("systemCode", "walletcheck"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.visits[0].entry_path").value("/analyze"))
+            .andExpect(jsonPath("$.visits[0].last_path").value("/wallet/:address"));
+    }
+
     private String walletVisitJson(String visitId, int durationSeconds, boolean queriedAddress) {
+        return walletVisitJson(visitId, durationSeconds, queriedAddress, "/wallet/0x123", "/wallet/0x123");
+    }
+
+    private String walletVisitJson(
+        String visitId,
+        int durationSeconds,
+        boolean queriedAddress,
+        String entryPath,
+        String lastPath
+    ) {
         return """
             {
               "visitId":"%s",
               "durationSeconds":%d,
-              "entryPath":"/wallet/0x123",
-              "lastPath":"/wallet/0x123",
+              "entryPath":"%s",
+              "lastPath":"%s",
               "deviceType":"desktop",
               "deviceModel":"Test PC",
               "operatingSystem":"Test OS",
@@ -110,6 +162,6 @@ class VisitApiIntegrationTest {
               "detectedWallets":[],
               "queriedAddress":%b
             }
-            """.formatted(visitId, durationSeconds, queriedAddress);
+            """.formatted(visitId, durationSeconds, entryPath, lastPath, queriedAddress);
     }
 }
