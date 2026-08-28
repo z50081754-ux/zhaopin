@@ -261,6 +261,83 @@ describe("ResearchVisitsModule", () => {
     expect(wrapper.get("[data-testid='visits-next']").attributes("disabled")).toBeDefined();
   });
 
+  it("commits a successful empty list with its nonzero summary and no corrective request", async () => {
+    const emptySummary = { todayEffective: 9, averageDurationSeconds: 45, maxDurationSeconds: 90, submittedCount: 4, conversionRate: 44.44 };
+    const fetch = vi.fn(async (url: string) => response(url.includes("/summary") ? emptySummary : { visits: [], total: 0, pages: 0 }));
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.findAll(".research-visits-summary article").map(card => card.text()))
+      .toEqual(["今日有效浏览9", "平均停留45 秒", "最长停留1 分 30 秒", "已提交问卷4", "提交转化率44.44%"]);
+    expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 0 / 0 页 · 共 0 条");
+    expect(wrapper.get("[data-testid='visits-previous']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='visits-next']").attributes("disabled")).toBeDefined();
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes("/api/admin/visits?")).length).toBe(1);
+  });
+
+  it("keeps the empty-page summary and stops correcting when a later page shrinks to zero", async () => {
+    const emptySummary = { todayEffective: 8, averageDurationSeconds: 30, maxDurationSeconds: 60, submittedCount: 3, conversionRate: 37.5 };
+    let listCalls = 0;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/summary")) return response(listCalls === 0 ? summary : emptySummary);
+      listCalls += 1;
+      return listCalls === 1 ? response({ ...list, total: 21, pages: 2 }) : response({ visits: [], total: 0, pages: 0 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.findAll(".research-visits-summary article").map(card => card.text()))
+      .toEqual(["今日有效浏览8", "平均停留30 秒", "最长停留1 分 0 秒", "已提交问卷3", "提交转化率37.5%"]);
+    expect(fetch.mock.calls.map(([url]) => String(url)).filter(url => url.includes("/api/admin/visits?")))
+      .toEqual([
+        "/api/admin/visits?systemCode=research&page=0&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+        "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all"
+      ]);
+    expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 0 / 0 页 · 共 0 条");
+  });
+
+  it("follows repeated page shrinkage with real corrective requests until page zero", async () => {
+    let pageZeroRequests = 0;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/summary")) return response(summary);
+      const requestedPage = new URL(url, "https://admin.test").searchParams.get("page");
+      if (requestedPage === "2") return response({ visits: [{ ...visit, id: 2, entry_path: "/invalid-page-2" }], total: 21, pages: 2 });
+      if (requestedPage === "1") {
+        const pageOneCount = fetch.mock.calls.map(([callUrl]) => String(callUrl)).filter(callUrl => callUrl.includes("/api/admin/visits?") && callUrl.includes("page=1")).length;
+        return pageOneCount === 1
+          ? response({ visits: [{ ...visit, id: 1, entry_path: "/valid-page-1" }], total: 41, pages: 3 })
+          : response({ visits: [{ ...visit, id: 10, entry_path: "/invalid-page-1" }], total: 1, pages: 1 });
+      }
+      pageZeroRequests += 1;
+      return pageZeroRequests === 1
+        ? response({ visits: [{ ...visit, id: 0, entry_path: "/initial-page-0" }], total: 41, pages: 3 })
+        : response({ visits: [{ ...visit, id: 0, entry_path: "/final-page-0" }], total: 1, pages: 1 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+
+    expect(fetch.mock.calls.map(([url]) => String(url)).filter(url => url.includes("/api/admin/visits?")))
+      .toEqual([
+        "/api/admin/visits?systemCode=research&page=0&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+        "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+        "/api/admin/visits?systemCode=research&page=2&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+        "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+        "/api/admin/visits?systemCode=research&page=0&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all"
+      ]);
+    expect(wrapper.find("[data-testid='research-visit-row-0']").exists()).toBe(true);
+    expect(wrapper.text()).toContain("/final-page-0");
+    expect(wrapper.text()).not.toContain("/invalid-page-1");
+  });
+
   it("renders the actual metrics and complete research visit fields", async () => {
     const incompleteVisit = { ...visit, submitted_research: false, visitor_country: "UNKNOWN" };
     const fetch = vi.fn(async (url: string) => response(url.includes("/summary") ? summary : {

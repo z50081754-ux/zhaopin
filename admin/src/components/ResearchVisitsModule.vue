@@ -102,7 +102,7 @@ function normalizeFilters(filters: VisitFilters): AppliedVisitFilters {
   };
 }
 
-async function load(allowCorrection = true): Promise<void> {
+async function load(): Promise<void> {
   controller?.abort();
   const requestController = new AbortController();
   controller = requestController;
@@ -129,12 +129,16 @@ async function load(allowCorrection = true): Promise<void> {
     if (requestGeneration !== generation) return;
     const nextPages = Math.max(0, nextList.pages || 0);
     if (nextPages === 0) {
-      clearResults();
+      page.value = 0;
+      summary.value = nextSummary;
+      visits.value = [];
+      total.value = nextList.total || 0;
+      pages.value = 0;
       return;
     }
-    if (requestedPage >= nextPages && allowCorrection) {
+    if (requestedPage >= nextPages) {
       page.value = nextPages - 1;
-      await load(false);
+      await load();
       return;
     }
     page.value = Math.min(requestedPage, nextPages - 1);
