@@ -4,6 +4,23 @@ import AdminView from "./AdminView.vue";
 
 const emptyApplications = { ok: true, applications: [], total: 0, pages: 0 };
 const emptyVisits = { visits: [], total: 0, pages: 0 };
+const emptyResearchCampaign = {
+  status: "ACTIVE",
+  effectiveStatus: "ACTIVE",
+  intakeEnabled: true,
+  dataAvailable: true,
+  termsVersion: "2026-08-29",
+  updatedAt: "2026-08-29T00:00:00Z"
+};
+const emptyResearchSummary = {
+  total: 0,
+  averageRating: 0,
+  ratingDistribution: {},
+  sceneDistribution: {},
+  concernDistribution: {},
+  sourceDistribution: {}
+};
+const emptyResearchSubmissions = { submissions: [], total: 0, pages: 0 };
 let wrappers: VueWrapper[] = [];
 
 function trackWrapper(wrapper: VueWrapper) {
@@ -131,6 +148,9 @@ function mountAdmin(pathname: string, visitBody: object = emptyVisits) {
     status: 200,
     json: async () => url.includes("/api/admin/session")
       ? { account: "admin" }
+      : url.includes("/api/admin/research/campaign") ? emptyResearchCampaign
+        : url.includes("/api/admin/research/summary") ? emptyResearchSummary
+          : url.includes("/api/admin/research/submissions") ? emptyResearchSubmissions
       : url.includes("/api/admin/visits") ? visitBody : emptyApplications
   }));
   vi.stubGlobal("fetch", fetch);
@@ -145,6 +165,39 @@ describe("AdminView subsystem shell", () => {
     wrappers = [];
     vi.unstubAllGlobals();
     window.history.replaceState({}, "", "/");
+  });
+
+  it("opens the research subsystem from the system home without loading recruitment data", async () => {
+    const { fetch, wrapper } = mountAdmin("/admin/");
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='research-entry']").exists()).toBe(true);
+    await wrapper.get("[data-testid='research-entry']").trigger("click");
+    await flushPromises();
+
+    expect(window.location.pathname).toBe("/admin/research/visits");
+    expect(wrapper.text()).toContain("Web3 钱包产品调研");
+    expect(wrapper.text()).toContain("有效浏览");
+    expect(wrapper.text()).not.toContain("候选人管理");
+    expect(wrapper.text()).not.toContain("招聘岗位");
+    expect(wrapper.text()).not.toContain("官网模板");
+    expect(fetch.mock.calls.map(([url]) => String(url)).some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
+  });
+
+  it("renders research submissions without loading recruitment or WalletCheck data", async () => {
+    const { fetch, wrapper } = mountAdmin("/admin/research/submissions");
+    await flushPromises();
+
+    expect(wrapper.find(".research-module").exists()).toBe(true);
+    const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
+  });
+
+  it("keeps research out of the recruitment navigation", async () => {
+    const { wrapper } = mountAdmin("/admin/recruitment");
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain("web3钱包产品调研");
   });
 
   it("opens WalletCheck from the system home with its own visit data", async () => {

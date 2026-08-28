@@ -2,7 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import XwLogo from "../components/XwLogo.vue";
 import ResearchModule from "../components/ResearchModule.vue";
-import { parseAdminPath, pathForAdminSystem, type AdminSystem } from "../systemRoute";
+import {
+  parseAdminPath,
+  parseResearchModule,
+  pathForAdminSystem,
+  pathForResearchModule,
+  type AdminSystem,
+  type ResearchAdminModule
+} from "../systemRoute";
 
 type Application = {
   id:number; application_no:string; resume_name:string; telegram:string; gender:string; age:string;
@@ -39,13 +46,15 @@ type WebsiteVisit = {
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
 const PUBLIC_SITE_URL=import.meta.env.VITE_PUBLIC_SITE_URL||"/";
+const SAKURAPAY_URL=import.meta.env.VITE_SAKURAPAY_URL||"https://sakurapay.xw-company.com/";
 const apiUrl=(path:string)=>`${API_BASE}${path}`;
 const account=ref(""), password=ref(""), authenticated=ref(false), loading=ref(false), error=ref("");
 const logoutInFlight=ref(false);
 const activeSystem=ref<AdminSystem>(parseAdminPath(window.location.pathname));
+const activeResearchModule=ref<ResearchAdminModule>(parseResearchModule(window.location.pathname));
 type SiteTemplate="technology"|"apple";
 type DefaultLanguage="auto"|"zh"|"en";
-const activeModule=ref<"applications"|"visits"|"jobs"|"templates"|"research">("applications"), query=ref(""), stage=ref("");
+const activeModule=ref<"applications"|"visits"|"jobs"|"templates">("applications"), query=ref(""), stage=ref("");
 const referrerQuery=ref(""), createdFrom=ref(""), createdTo=ref(""), operatingSystemQuery=ref(""), deviceModelQuery=ref("");
 const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDetail|null>(null);
 const selectedApplicationIds=ref<number[]>([]);
@@ -388,16 +397,21 @@ async function selectDefaultLanguage(value:DefaultLanguage){
     defaultLanguage.value=result.defaultLanguage;templateMessage.value="默认语言已保存，仅影响尚未手动选择过语言的访客。";
   }catch(e){handleViewError(owner,e,`默认语言保存失败：${(e as Error).message}`)}finally{if(ownsViewRequest(owner))templateSaving.value=false;finishLoading(owner)}
 }
-function switchModule(module:"applications"|"visits"|"jobs"|"templates"|"research"){
+function switchModule(module:"applications"|"visits"|"jobs"|"templates"){
   if(activeModule.value!==module)invalidateViewRequests();
   activeModule.value=module;
   if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else if(module==="applications")void loadApplications();
+}
+function navigateResearchModule(module:ResearchAdminModule){
+  activeResearchModule.value=module;
+  window.history.pushState({},"",pathForResearchModule(module));
 }
 function navigateSystem(system:AdminSystem){
   if(activeSystem.value!==system){
     invalidateViewRequests();clearVisitData();
   }
   activeSystem.value=system;
+  if(system==="research")activeResearchModule.value="visits";
   window.history.pushState({},"",pathForAdminSystem(system));
   void loadVisibleSystem(system);
 }
@@ -407,6 +421,7 @@ function syncSystemFromPath(){
     invalidateViewRequests();clearVisitData();
   }
   activeSystem.value=system;
+  if(system==="research")activeResearchModule.value=parseResearchModule(window.location.pathname);
   if(authenticated.value)void loadVisibleSystem(activeSystem.value);
 }
 onMounted(()=>{
@@ -430,11 +445,12 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
 
     <template v-else>
       <header class="admin-header">
-        <div class="admin-brand"><XwLogo/><span>{{activeSystem==='home'?'系统管理':activeSystem==='walletcheck'?'WalletCheck':'招聘系统'}}</span></div>
+        <div class="admin-brand"><XwLogo/><span>{{activeSystem==='home'?'系统管理':activeSystem==='walletcheck'?'WalletCheck':activeSystem==='research'?'Web3 钱包产品调研':'招聘系统'}}</span></div>
         <div class="admin-header-actions">
           <button v-if="activeSystem!=='home'" type="button" data-testid="system-home" @click="navigateSystem('home')">← 返回系统首页</button>
           <span v-if="account" data-testid="current-account">账号：{{account}}</span>
-          <a v-if="activeSystem!=='walletcheck'" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a>
+          <a v-if="activeSystem==='research'" :href="SAKURAPAY_URL" target="_blank" rel="noopener">查看调研官网 ↗</a>
+          <a v-else-if="activeSystem!=='walletcheck'" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a>
           <button type="button" data-testid="logout" :disabled="logoutInFlight" @click="logout">退出登录</button>
         </div>
       </header>
@@ -443,6 +459,7 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
         <div class="system-entry-grid">
           <button type="button" class="system-entry" data-testid="recruitment-entry" @click="navigateSystem('recruitment')"><small>RECRUITMENT</small><h2>招聘系统</h2><p>管理候选人、有效浏览、招聘岗位与官网设置。</p><span>进入系统 →</span></button>
           <button type="button" class="system-entry" data-testid="walletcheck-entry" @click="navigateSystem('walletcheck')"><small>WALLETCHECK</small><h2>WalletCheck</h2><p>查看 WalletCheck 的有效访问与地址查询情况。</p><span>进入系统 →</span></button>
+          <button type="button" class="system-entry" data-testid="research-entry" @click="navigateSystem('research')"><small>SAKURAPAY RESEARCH</small><h2>Web3 钱包产品调研</h2><p>查看 SakuraPay 产品调研的有效浏览与问卷提交记录。</p><span>进入系统 →</span></button>
         </div>
       </section>
       <section v-else class="admin-main">
@@ -451,7 +468,10 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
           <button :class="{active:activeModule==='visits'}" @click="switchModule('visits')">有效浏览</button>
           <button :class="{active:activeModule==='jobs'}" @click="switchModule('jobs')">岗位管理</button>
           <button :class="{active:activeModule==='templates'}" @click="switchModule('templates')">官网模板</button>
-          <button :class="{active:activeModule==='research'}" @click="switchModule('research')">web3钱包产品调研</button>
+        </nav>
+        <nav v-else-if="activeSystem==='research'" class="admin-modules">
+          <button :class="{active:activeResearchModule==='visits'}" @click="navigateResearchModule('visits')">有效浏览</button>
+          <button :class="{active:activeResearchModule==='submissions'}" @click="navigateResearchModule('submissions')">调研记录</button>
         </nav>
         <template v-if="activeSystem==='recruitment'&&activeModule==='applications'">
           <div class="admin-title"><div><small>APPLICATION PIPELINE</small><h1>候选人投递</h1></div><b>{{String(filteredCount).padStart(2,"0")}}</b></div>
@@ -517,7 +537,7 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
           </div>
         </template>
 
-        <template v-else-if="activeModule==='visits'||activeSystem==='walletcheck'">
+        <template v-else-if="(activeSystem==='recruitment'&&activeModule==='visits')||activeSystem==='walletcheck'">
           <div class="admin-title"><div><small>{{activeSystem==='walletcheck'?'WALLETCHECK QUALIFIED VISITS':'QUALIFIED WEBSITE VISITS'}}</small><h1>{{activeSystem==='walletcheck'?'WalletCheck 有效浏览':'有效浏览'}}</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
           <p v-if="activeSystem==='walletcheck'" class="visit-description">WalletCheck 仅累计页面可见停留；满 15 秒后记录有效浏览，并以“查询过地址”展示地址查询转化。</p>
           <p v-else class="visit-description">钱包检测在页面进入时立即开始；访客在页面可见状态下停留满 15 秒后，才将有效浏览与检测到的钱包一起上报后台。</p>
@@ -555,7 +575,12 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
           </div>
         </template>
 
-        <template v-else-if="activeModule==='jobs'">
+        <template v-else-if="activeSystem==='research'&&activeResearchModule==='visits'">
+          <div class="admin-title"><div><small>SAKURAPAY RESEARCH VISITS</small><h1>有效浏览</h1></div><b>—</b></div>
+          <p class="visit-description">SakuraPay 调研有效浏览统计将在下一阶段上线。</p>
+        </template>
+        <ResearchModule v-else-if="activeSystem==='research'&&activeResearchModule==='submissions'" :api-base="API_BASE" />
+        <template v-else-if="activeSystem==='recruitment'&&activeModule==='jobs'">
           <div class="admin-title"><div><small>JOB MANAGEMENT</small><h1>招聘岗位</h1></div><div class="admin-job-summary"><span>总岗位数 <b>{{totalJobCount}}</b></span><button class="primary-btn admin-create" @click="newJob">＋ 新建岗位</button></div></div>
           <p v-if="error" class="admin-error">{{error}}</p>
           <div class="job-status-filters">
@@ -573,7 +598,6 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
             <button v-if="!filteredJobs.length&&!loading" class="admin-job-empty" @click="jobStatusFilter==='all'&&newJob()">{{jobs.length?'当前筛选下暂无岗位':'还没有后台岗位，创建第一个岗位'}}</button>
           </div>
         </template>
-        <ResearchModule v-else-if="activeModule==='research'" :api-base="API_BASE" />
         <template v-else>
           <div class="admin-title"><div><small>WEBSITE APPEARANCE</small><h1>官网模板</h1></div><a class="template-preview-link" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">打开官网预览 ↗</a></div>
           <p class="template-intro">选择招聘官网首页的视觉风格。启用后立即保存到数据库，所有访客刷新首页后都会看到新的模板。</p>
