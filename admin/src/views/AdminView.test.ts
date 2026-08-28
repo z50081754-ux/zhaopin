@@ -204,6 +204,22 @@ describe("AdminView subsystem shell", () => {
     expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
   });
 
+  it("clears the authenticated parent session when the research visit API returns 401", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "admin" });
+      if (url.includes("/api/admin/visits")) return response({}, 401);
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/research/visits");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("安全登录");
+    expect(wrapper.find(".research-visits-module").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='current-account']").exists()).toBe(false);
+  });
+
   it("keeps research visit and submission history isolated from other admin APIs", async () => {
     const { fetch, wrapper } = mountAdmin("/admin/research/visits");
     await flushPromises();

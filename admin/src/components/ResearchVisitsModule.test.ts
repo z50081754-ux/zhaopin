@@ -95,6 +95,44 @@ describe("ResearchVisitsModule", () => {
     );
   });
 
+  it("restores the maximum duration default when the optional input is blank", async () => {
+    const fetch = vi.fn(async (url: string) => response(url.includes("/summary") ? summary : list));
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='visits-max-duration']").setValue("");
+    await wrapper.get("[data-testid='visits-search']").trigger("click");
+    await flushPromises();
+
+    expect(fetch).toHaveBeenLastCalledWith(
+      initialListUrl,
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("renders the actual metrics and complete research visit fields", async () => {
+    const incompleteVisit = { ...visit, submitted_research: false, visitor_country: "UNKNOWN" };
+    const fetch = vi.fn(async (url: string) => response(url.includes("/summary") ? summary : {
+      visits: [incompleteVisit], total: 1, pages: 1
+    }));
+    vi.stubGlobal("fetch", fetch);
+
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    const cards = wrapper.findAll(".research-visits-summary article").map(card => card.text());
+    expect(cards).toEqual(["今日有效浏览3", "平均停留2 分 5 秒", "最长停留4 分 0 秒", "已提交问卷2", "提交转化率66.67%"]);
+    const row = wrapper.get("[data-testid='research-visit-row-7']").text();
+    expect(row).toContain("2026/8/29 08:00:00");
+    expect(row).toContain("2026/8/29 08:04:10");
+    expect(row).toContain("/research");
+    expect(row).toContain("iPhone · mobile");
+    expect(row).toContain("Safari");
+    expect(row).toContain("未知 · 203.0.113.7");
+    expect(row).toContain("未提交");
+  });
+
   it("emits unauthorized and clears stale metrics and rows after a 401", async () => {
     let request = 0;
     const fetch = vi.fn(async (url: string) => {

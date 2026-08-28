@@ -13,7 +13,7 @@ type ResearchVisit = {
   id: number;
   started_at: string;
   qualified_at: string;
-  duration_seconds: number | "UNKNOWN";
+  duration_seconds: number;
   last_seen_at: string;
   entry_path: string;
   device_type: string;
@@ -34,7 +34,9 @@ const emptySummary = (): VisitSummary => ({
   submittedCount: 0,
   conversionRate: 0
 });
-const filters = reactive({ from: "", to: "", minDurationSeconds: 0, maxDurationSeconds: 86400, submittedResearch: "all" });
+const filters = reactive<{ from: string; to: string; minDurationSeconds: number; maxDurationSeconds: number | ""; submittedResearch: string }>({
+  from: "", to: "", minDurationSeconds: 0, maxDurationSeconds: 86400, submittedResearch: "all"
+});
 const summary = ref<VisitSummary>(emptySummary());
 const visits = ref<ResearchVisit[]>([]);
 const total = ref(0);
@@ -56,14 +58,17 @@ function clearResults() {
   pages.value = 0;
 }
 
-function duration(value: number | "UNKNOWN") {
-  if (value === "UNKNOWN") return "未知";
+function duration(value: number) {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
   return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
 }
 
 function display(value: string | null | undefined) {
   return value || "—";
+}
+
+function country(value: string | null | undefined) {
+  return value === "UNKNOWN" ? "未知" : display(value);
 }
 
 async function request<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -85,7 +90,7 @@ async function load() {
     page: String(page),
     size: "20",
     minDurationSeconds: String(Math.max(0, Number(filters.minDurationSeconds) || 0)),
-    maxDurationSeconds: String(Math.max(0, Number(filters.maxDurationSeconds) || 0)),
+    maxDurationSeconds: String(filters.maxDurationSeconds === "" ? 86400 : Math.max(0, Number(filters.maxDurationSeconds) || 0)),
     submittedResearch: filters.submittedResearch
   });
   if (filters.from) listParams.set("from", filters.from);
@@ -162,7 +167,7 @@ onBeforeUnmount(() => {
             <td>{{ new Date(visit.last_seen_at).toLocaleString("zh-CN") }}</td>
             <td :title="visit.entry_path">{{ display(visit.entry_path) }}</td>
             <td>{{ display(visit.device_model) }} · {{ display(visit.device_type) }}<small>{{ display(visit.browser_name) }}</small></td>
-            <td>{{ display(visit.visitor_country) }} · {{ display(visit.ip_address) }}</td>
+            <td>{{ country(visit.visitor_country) }} · {{ display(visit.ip_address) }}</td>
             <td><em class="research-visit-submitted" :class="{ submitted: visit.submitted_research }">{{ visit.submitted_research ? "已提交" : "未提交" }}</em></td>
           </tr>
           <tr v-if="!loading && !visits.length"><td class="research-visits-empty" colspan="7">暂无符合条件的有效浏览</td></tr>
