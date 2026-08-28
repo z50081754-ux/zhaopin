@@ -1,10 +1,10 @@
 package com.xw.recruitment.research;
 
-import com.xw.recruitment.config.VisitorRegionResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,12 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/research")
 public class PublicResearchController {
     private final ResearchSubmissionService service;
-    private final VisitorRegionResolver regionResolver;
+    private final ResearchClientIpResolver clientIpResolver;
 
     public PublicResearchController(ResearchSubmissionService service,
-            VisitorRegionResolver regionResolver) {
+            ResearchClientIpResolver clientIpResolver) {
         this.service = service;
-        this.regionResolver = regionResolver;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @GetMapping("/campaign")
@@ -29,11 +29,11 @@ public class PublicResearchController {
         return CampaignResponse.from(service.publicCampaign());
     }
 
-    @PostMapping("/submissions")
+    @PostMapping(value = "/submissions", consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     public SubmitResponse submit(@Valid @RequestBody ResearchSubmissionRequest body,
             HttpServletRequest request) {
-        return SubmitResponse.from(service.submit(body, regionResolver.ipAddress(request),
+        return SubmitResponse.from(service.submit(body, clientIpResolver.clientIp(request),
             request.getHeader("User-Agent")));
     }
 

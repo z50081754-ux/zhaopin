@@ -2,7 +2,10 @@ package com.xw.recruitment.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Clock;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -81,21 +84,62 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource(
         @Value("${xw.cors.allowed-origins}") String allowedOrigins,
-        @Value("${xw.cors.allowed-origin-patterns:}") String allowedOriginPatterns
+        @Value("${xw.cors.admin-origins}") String adminOrigins
     ) {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(
-            java.util.Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(value -> !value.isBlank()).toList()
-        );
-        configuration.setAllowedOriginPatterns(
-            java.util.Arrays.stream(allowedOriginPatterns.split(",")).map(String::trim).filter(value -> !value.isBlank()).toList()
-        );
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Content-Type", "Authorization"));
-        configuration.setAllowCredentials(true);
+        List<String> exactPublicOrigins = exactOrigins(allowedOrigins, "xw.cors.allowed-origins");
+        List<String> exactAdminOrigins = exactOrigins(adminOrigins, "xw.cors.admin-origins");
+
+        CorsConfiguration publicResearch = new CorsConfiguration();
+        publicResearch.setAllowedOrigins(exactPublicOrigins);
+        publicResearch.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        publicResearch.setAllowedHeaders(List.of("Accept", "Content-Type"));
+        publicResearch.setAllowCredentials(false);
+
+        CorsConfiguration admin = new CorsConfiguration();
+        admin.setAllowedOrigins(exactAdminOrigins);
+        admin.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        admin.setAllowedHeaders(List.of("Content-Type", "Authorization"));
+        admin.setAllowCredentials(true);
+
+        CorsConfiguration existingPublicApi = new CorsConfiguration();
+        existingPublicApi.setAllowedOrigins(exactPublicOrigins);
+        existingPublicApi.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        existingPublicApi.setAllowedHeaders(List.of("Content-Type", "Authorization"));
+        existingPublicApi.setAllowCredentials(true);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/api/research/**", publicResearch);
+        source.registerCorsConfiguration("/api/admin/**", admin);
+        source.registerCorsConfiguration("/api/**", existingPublicApi);
         return source;
+    }
+
+    private List<String> exactOrigins(String configuredOrigins, String propertyName) {
+        List<String> origins = Arrays.stream(configuredOrigins.split(","))
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .toList();
+        for (String origin : origins) {
+            if (origin.contains("*")) {
+                throw new IllegalStateException(propertyName + " must contain exact origins, not wildcards");
+            }
+            try {
+                URI parsed = new URI(origin);
+                boolean exactHttpOrigin = ("http".equalsIgnoreCase(parsed.getScheme())
+                    || "https".equalsIgnoreCase(parsed.getScheme()))
+                    && parsed.getHost() != null
+                    && parsed.getUserInfo() == null
+                    && (parsed.getPath() == null || parsed.getPath().isEmpty())
+                    && parsed.getQuery() == null
+                    && parsed.getFragment() == null;
+                if (!exactHttpOrigin) {
+                    throw new IllegalStateException(propertyName + " contains a non-origin value");
+                }
+            } catch (URISyntaxException exception) {
+                throw new IllegalStateException(propertyName + " contains an invalid origin", exception);
+            }
+        }
+        return origins;
     }
 
     private void writeUnauthorized(HttpServletResponse response) throws java.io.IOException {

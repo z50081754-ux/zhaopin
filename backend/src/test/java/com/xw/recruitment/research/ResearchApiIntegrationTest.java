@@ -34,8 +34,8 @@ import org.springframework.test.web.servlet.MockMvc;
     "xw.storage.directory=./target/test-resumes",
     "xw.research.enabled=true",
     "xw.research.wallet-encryption-key=MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=",
-    "xw.research.wallet-hash-key=wallet-hash-admin-test-key",
-    "xw.research.privacy-hash-key=privacy-hash-admin-test-key",
+    "xw.research.wallet-hash-key=wallet-hash-admin-test-key-material-0001",
+    "xw.research.privacy-hash-key=privacy-hash-admin-test-key-material-001",
     "xw.research.rate-limit-per-minute=20"
 })
 @AutoConfigureMockMvc

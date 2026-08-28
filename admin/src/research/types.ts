@@ -1,4 +1,5 @@
 export type ResearchCampaignStatus = "ACTIVE" | "PAUSED";
+export type ResearchCampaignEffectiveStatus = ResearchCampaignStatus | "DISABLED" | "UNAVAILABLE";
 
 export type ResearchSubmission = {
   id: number;
@@ -23,11 +24,14 @@ export type ResearchSummary = {
 
 export type ResearchCampaign = {
   status: ResearchCampaignStatus;
+  effectiveStatus: ResearchCampaignEffectiveStatus;
+  intakeEnabled: boolean;
+  dataAvailable: boolean;
   termsVersion: string;
   updatedAt: string;
 };
 
-export type ResearchDetail = ResearchSubmission & {
+export type ResearchDetail = Omit<ResearchSubmission, "maskedWalletAddress"> & {
   walletNetwork: string;
   walletAddress: string;
   termsVersion: string;

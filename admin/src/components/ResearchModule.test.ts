@@ -11,6 +11,7 @@ import {
   loadResearchSummary,
   updateResearchCampaign
 } from "../research/api";
+import type { ResearchDetail } from "../research/types";
 
 vi.mock("../research/api", () => ({
   loadResearchCampaign: vi.fn(),
@@ -36,8 +37,15 @@ const fixture = {
   createdAt: "2026-08-28T00:00:00Z"
 };
 
-const detail = {
-  ...fixture,
+const detail: ResearchDetail = {
+  id: fixture.id,
+  submissionNumber: fixture.submissionNumber,
+  source: fixture.source,
+  rating: fixture.rating,
+  scenes: fixture.scenes,
+  concern: fixture.concern,
+  feedback: fixture.feedback,
+  createdAt: fixture.createdAt,
   walletNetwork: "TRC20",
   walletAddress: "TJRabP1oZkX5wX6u5h5R6xSzz9gYpRTv8",
   termsVersion: "2026-08-28",
@@ -56,6 +64,9 @@ const summaryFixture = {
 function mockInitialLoad() {
   vi.mocked(loadResearchCampaign).mockResolvedValue({
     status: "ACTIVE",
+    effectiveStatus: "ACTIVE",
+    intakeEnabled: true,
+    dataAvailable: true,
     termsVersion: "2026-08-28",
     updatedAt: "2026-08-28T00:00:00Z"
   });
@@ -73,6 +84,9 @@ describe("ResearchModule", () => {
     mockInitialLoad();
     vi.mocked(updateResearchCampaign).mockResolvedValue({
       status: "PAUSED",
+      effectiveStatus: "PAUSED",
+      intakeEnabled: true,
+      dataAvailable: true,
       termsVersion: "2026-08-28",
       updatedAt: "2026-08-28T00:01:00Z"
     });
@@ -100,6 +114,82 @@ describe("ResearchModule", () => {
 
     expect(updateResearchCampaign).toHaveBeenCalledWith("", "PAUSED");
     expect(wrapper.text()).toContain("已暂停");
+  });
+
+  it("shows a truthful loading state before the campaign request resolves", async () => {
+    vi.mocked(loadResearchCampaign).mockReturnValue(new Promise(() => {}));
+
+    const wrapper = mount(ResearchModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("状态读取中");
+    expect(wrapper.text()).not.toContain("活动已暂停");
+    const toggle = wrapper.get("[data-testid='campaign-toggle']");
+    expect(toggle.text()).toBe("状态不可操作");
+    expect(toggle.attributes("disabled")).toBeDefined();
+  });
+
+  it("shows a truthful error state when the campaign request fails", async () => {
+    vi.mocked(loadResearchCampaign).mockRejectedValue(new Error("连接中断"));
+
+    const wrapper = mount(ResearchModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("状态读取失败");
+    expect(wrapper.text()).not.toContain("活动已暂停");
+    const toggle = wrapper.get("[data-testid='campaign-toggle']");
+    expect(toggle.text()).toBe("状态不可操作");
+    expect(toggle.attributes("disabled")).toBeDefined();
+  });
+
+  it("distinguishes a disabled intake gate from the stored campaign status", async () => {
+    vi.mocked(loadResearchCampaign).mockResolvedValue({
+      status: "ACTIVE",
+      effectiveStatus: "DISABLED",
+      intakeEnabled: false,
+      dataAvailable: true,
+      termsVersion: "2026-08-28",
+      updatedAt: "2026-08-28T00:00:00Z"
+    });
+
+    const wrapper = mount(ResearchModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("报名入口已禁用");
+    expect(wrapper.text()).not.toContain("活动进行中");
+    expect(wrapper.get("[data-testid='campaign-toggle']").attributes("disabled")).toBeUndefined();
+  });
+
+  it("blocks activation while the intake gate is disabled", async () => {
+    vi.mocked(loadResearchCampaign).mockResolvedValue({
+      status: "PAUSED",
+      effectiveStatus: "DISABLED",
+      intakeEnabled: false,
+      dataAvailable: true,
+      termsVersion: "2026-08-28",
+      updatedAt: "2026-08-28T00:00:00Z"
+    });
+
+    const wrapper = mount(ResearchModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='campaign-toggle']").attributes("disabled")).toBeDefined();
+  });
+
+  it("reports when protected research data cannot be managed", async () => {
+    vi.mocked(loadResearchCampaign).mockResolvedValue({
+      status: "PAUSED",
+      effectiveStatus: "DISABLED",
+      intakeEnabled: false,
+      dataAvailable: false,
+      termsVersion: "2026-08-28",
+      updatedAt: "2026-08-28T00:00:00Z"
+    });
+
+    const wrapper = mount(ResearchModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("加密数据不可用");
   });
 
   it("applies a submission-number and source filter before reloading the list", async () => {

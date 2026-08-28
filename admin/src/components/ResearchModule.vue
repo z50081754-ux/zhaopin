@@ -31,6 +31,7 @@ const emptySummary = (): ResearchSummary => ({
 });
 
 const campaign = ref<ResearchCampaign | null>(null);
+const campaignLoadState = ref<"loading" | "ready" | "error">("loading");
 const summary = ref<ResearchSummary>(emptySummary());
 const submissions = ref<ResearchSubmission[]>([]);
 const selectedSubmissionIds = ref<number[]>([]);
@@ -62,8 +63,24 @@ const selectedSubmissions = computed(() => submissions.value
   .filter(submission => selectedSubmissionIds.value.includes(submission.id)));
 const allOnPageSelected = computed(() => submissions.value.length > 0
   && submissions.value.every(submission => selectedSubmissionIds.value.includes(submission.id)));
-const campaignLabel = computed(() => campaign.value?.status === "ACTIVE" ? "进行中" : "已暂停");
-const campaignToggleLabel = computed(() => campaign.value?.status === "ACTIVE" ? "暂停调研" : "恢复调研");
+const campaignLabel = computed(() => {
+  if (campaignLoadState.value === "loading") return "状态读取中";
+  if (campaignLoadState.value === "error" || !campaign.value) return "状态读取失败";
+  return {
+    ACTIVE: "进行中",
+    PAUSED: "已暂停",
+    DISABLED: "报名入口已禁用",
+    UNAVAILABLE: "状态不可用"
+  }[campaign.value.effectiveStatus];
+});
+const campaignToggleLabel = computed(() => {
+  if (campaignLoadState.value !== "ready" || !campaign.value) return "状态不可操作";
+  return campaign.value.status === "ACTIVE" ? "暂停调研" : "恢复调研";
+});
+const campaignCanToggle = computed(() => campaignLoadState.value === "ready"
+  && campaign.value !== null
+  && (campaign.value.status === "ACTIVE"
+    || (campaign.value.intakeEnabled && campaign.value.dataAvailable)));
 const topDistribution = (distribution: Record<string, number>) => Object.entries(distribution)
   .sort(([, countA], [, countB]) => countB - countA)[0]?.[0] || "—";
 const currentFilters = (): Required<ResearchFilters> => ({ ...filters });
@@ -102,16 +119,16 @@ async function loadSubmissions(resetSelection = true, propagateError = false) {
 
 async function loadDashboard() {
   loading.value = true;
+  campaignLoadState.value = "loading";
+  campaign.value = null;
   error.value = "";
   try {
-    const [campaignResult, summaryResult] = await Promise.all([
-      loadResearchCampaign(props.apiBase),
-      loadResearchSummary(props.apiBase)
-    ]);
-    campaign.value = campaignResult;
-    summary.value = summaryResult;
+    campaign.value = await loadResearchCampaign(props.apiBase);
+    campaignLoadState.value = "ready";
+    summary.value = await loadResearchSummary(props.apiBase);
     await loadSubmissions();
   } catch (reason) {
+    if (!campaign.value) campaignLoadState.value = "error";
     requestError("调研模块加载", reason);
   } finally {
     loading.value = false;
@@ -308,9 +325,9 @@ onMounted(() => void loadDashboard());
         <small>WEB3 WALLET RESEARCH</small>
         <h1 id="research-title">web3钱包产品调研</h1>
       </div>
-      <div class="research-campaign" :class="campaign?.status === 'ACTIVE' ? 'active' : 'paused'">
+      <div class="research-campaign" :class="campaign?.effectiveStatus === 'ACTIVE' ? 'active' : 'paused'">
         <span>活动{{ campaignLabel }}</span>
-        <button data-testid="campaign-toggle" type="button" :disabled="loading || !campaign" @click="toggleCampaign">
+        <button data-testid="campaign-toggle" type="button" :disabled="loading || !campaignCanToggle" @click="toggleCampaign">
           {{ campaignToggleLabel }}
         </button>
       </div>
@@ -318,6 +335,9 @@ onMounted(() => void loadDashboard());
 
     <p class="research-description">管理问卷收集记录。列表仅显示脱敏钱包地址；完整地址仅在详情、精确查找和 CSV 导出中提供。</p>
     <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
+    <p v-if="campaign && !campaign.dataAvailable" class="admin-error" role="alert">
+      加密数据不可用：请配置完整且相互独立的调研密钥后再读取受保护数据。
+    </p>
     <p v-if="notice" class="research-notice" role="status">{{ notice }}</p>
 
     <section class="research-summary" aria-label="调研汇总">

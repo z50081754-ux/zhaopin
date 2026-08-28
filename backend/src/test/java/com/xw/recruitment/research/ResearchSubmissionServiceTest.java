@@ -9,7 +9,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,8 +25,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
     "spring.datasource.url=jdbc:h2:mem:research-service;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
     "xw.research.enabled=true",
     "xw.research.wallet-encryption-key=MDEyMzQ1Njc4OUFCQ0RFRjAxMjM0NTY3ODlBQkNERUY=",
-    "xw.research.wallet-hash-key=wallet-hash-test-key",
-    "xw.research.privacy-hash-key=privacy-hash-test-key",
+    "xw.research.wallet-hash-key=wallet-hash-service-test-key-material-001",
+    "xw.research.privacy-hash-key=privacy-hash-service-test-key-material-01",
     "xw.research.rate-limit-per-minute=2"
 })
 class ResearchSubmissionServiceTest {
@@ -75,6 +79,28 @@ class ResearchSubmissionServiceTest {
 
         assertEquals("DUPLICATE_WALLET", exception.code());
         assertEquals(1, submissions.count());
+    }
+
+    @Test
+    void concurrentDuplicateWalletSubmissionsPersistExactlyOneRecord() throws Exception {
+        var executor = Executors.newFixedThreadPool(2);
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        try {
+            var first = executor.submit(() -> submitAfterGate(ready, start, "127.0.1.1"));
+            var second = executor.submit(() -> submitAfterGate(ready, start, "127.0.1.2"));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+
+            var results = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+            assertEquals(1, results.stream().filter("SUCCESS"::equals).count());
+            assertEquals(1, results.stream().filter("DUPLICATE_WALLET"::equals).count());
+            assertEquals(1, submissions.count());
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+        }
     }
 
     @Test
@@ -149,6 +175,18 @@ class ResearchSubmissionServiceTest {
         return new ResearchSubmissionRequest("OPEN_CARD", 5,
             Set.of("TRAVEL", "SHOPPING"), "SECURITY", "费用需要透明。",
             "TRC20", WALLET, "2026-08-01", true);
+    }
+
+    private String submitAfterGate(CountDownLatch ready, CountDownLatch start, String ip)
+            throws InterruptedException {
+        ready.countDown();
+        assertTrue(start.await(5, TimeUnit.SECONDS));
+        try {
+            service.submit(validRequest(), ip, "concurrent-test-agent");
+            return "SUCCESS";
+        } catch (ResearchApiException exception) {
+            return exception.code();
+        }
     }
 
     private ResearchSubmissionRequest requestWith(String source, String network, String wallet,

@@ -24,11 +24,14 @@
 
 ```bash
 FRONTEND_ORIGINS=http://127.0.0.1:4173,http://127.0.0.1:4174
+ADMIN_FRONTEND_ORIGINS=http://127.0.0.1:3001
+RESEARCH_TRUSTED_PROXIES=127.0.0.1,::1
 ```
 
-生产环境将上面的两个值替换为实际的、精确的 HTTPS origin（只包含协议、主机和
-可选端口，不含路径或末尾 `/`），其中必须包含 SakuraPay 的精确 origin。不要用
-`*` 或宽泛的子域匹配代替。若 SakuraPay 由自己的 Nginx 提供，优先把 `/api/`
+生产环境将上面的 origin 替换为实际的、精确的 HTTPS origin（只包含协议、主机和
+可选端口，不含路径或末尾 `/`）。`FRONTEND_ORIGINS` 必须包含 SakuraPay/站点前端，
+`ADMIN_FRONTEND_ORIGINS` 只包含 TX 管理后台。不要用 `*` 或宽泛的子域匹配代替；完全
+同源部署可将对应 CORS 列表留空。若 SakuraPay 由自己的 Nginx 提供，优先把 `/api/`
 反向代理到 TX API，以保持浏览器同源访问：
 
 ```nginx
@@ -37,10 +40,15 @@ location /api/ {
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # 覆盖而非追加浏览器传入的值，建立可验证的受信任代理边界。
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
+
+上例中后端只信任同机 nginx，因此 `RESEARCH_TRUSTED_PROXIES=127.0.0.1,::1`。若没有
+反向代理则保持该变量为空，后端直接使用 TCP 客户端地址。多级代理部署必须在每一受控
+边界覆盖或安全追加转发链，并只配置实际代理的精确 IP；不要信任客户端提供的转发头。
 
 同源反向代理构建 SakuraPay 时将 `VITE_API_BASE_URL` 留空；确需分域时再指定 TX API
 的 HTTPS origin，例如：
@@ -49,7 +57,8 @@ location /api/ {
 VITE_API_BASE_URL=https://api.example.com npm run build
 ```
 
-分域值也必须对应 `FRONTEND_ORIGINS` 中允许的 SakuraPay/管理后台精确来源。上线前
+分域值也必须对应 `FRONTEND_ORIGINS` 中允许的 SakuraPay 精确来源；管理后台则对应
+`ADMIN_FRONTEND_ORIGINS`。上线前
 由产品负责人和隐私负责人审核活动规则与隐私说明。本发布只提供
 `web3钱包产品调研` 数据收集和授权管理功能，不提供抽取、公布结果、奖励发放、
 钱包转账或任何链上操作。

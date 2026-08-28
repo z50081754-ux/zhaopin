@@ -21,6 +21,7 @@ public class ResearchCryptoService {
     private final SecretKey encryptionKey;
     private final byte[] walletHashKey;
     private final byte[] privacyHashKey;
+    private final boolean available;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public ResearchCryptoService(
@@ -28,30 +29,53 @@ public class ResearchCryptoService {
             @Value("${xw.research.wallet-encryption-key:}") String encryptionKey,
             @Value("${xw.research.wallet-hash-key:}") String walletHashKey,
             @Value("${xw.research.privacy-hash-key:}") String privacyHashKey) {
-        if (enabled) {
-            byte[] decodedKey;
-            try {
-                decodedKey = Base64.getDecoder().decode(encryptionKey);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalStateException("Research wallet encryption key must be Base64", e);
-            }
-            if (decodedKey.length != 32) {
-                throw new IllegalStateException("Research wallet encryption key must decode to 32 bytes");
-            }
-            if (walletHashKey.isBlank() || privacyHashKey.isBlank()) {
-                throw new IllegalStateException("Research hash keys must not be blank");
-            }
-            this.encryptionKey = new SecretKeySpec(decodedKey, "AES");
-        } else {
+        boolean anyKeyConfigured = !encryptionKey.isBlank()
+            || !walletHashKey.isBlank() || !privacyHashKey.isBlank();
+        if (!enabled && !anyKeyConfigured) {
             this.encryptionKey = null;
+            this.walletHashKey = null;
+            this.privacyHashKey = null;
+            this.available = false;
+            return;
         }
-        this.walletHashKey = walletHashKey.getBytes(StandardCharsets.UTF_8);
-        this.privacyHashKey = privacyHashKey.getBytes(StandardCharsets.UTF_8);
+
+        if (encryptionKey.isBlank() || walletHashKey.isBlank() || privacyHashKey.isBlank()) {
+            throw new IllegalStateException("All research crypto keys must be configured together");
+        }
+        byte[] decodedKey;
+        try {
+            decodedKey = Base64.getDecoder().decode(encryptionKey);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Research wallet encryption key must be Base64", exception);
+        }
+        if (decodedKey.length != 32) {
+            throw new IllegalStateException("Research wallet encryption key must decode to 32 bytes");
+        }
+        byte[] walletKeyBytes = walletHashKey.getBytes(StandardCharsets.UTF_8);
+        byte[] privacyKeyBytes = privacyHashKey.getBytes(StandardCharsets.UTF_8);
+        if (walletKeyBytes.length < 32 || privacyKeyBytes.length < 32) {
+            throw new IllegalStateException("Research HMAC keys must each contain at least 32 bytes");
+        }
+        if (walletHashKey.equals(privacyHashKey)
+                || encryptionKey.equals(walletHashKey)
+                || encryptionKey.equals(privacyHashKey)) {
+            throw new IllegalStateException("Research crypto keys must be independent");
+        }
+
+        this.encryptionKey = new SecretKeySpec(decodedKey, "AES");
+        this.walletHashKey = walletKeyBytes;
+        this.privacyHashKey = privacyKeyBytes;
+        this.available = true;
     }
 
     public record EncryptedWallet(String ciphertext, String nonce) {}
 
+    public boolean available() {
+        return available;
+    }
+
     public EncryptedWallet encryptWallet(String address) {
+        requireAvailable();
         byte[] nonce = new byte[NONCE_LENGTH];
         secureRandom.nextBytes(nonce);
         try {
@@ -65,6 +89,7 @@ public class ResearchCryptoService {
     }
 
     public String decryptWallet(EncryptedWallet encryptedWallet) {
+        requireAvailable();
         try {
             byte[] nonce = Base64.getDecoder().decode(encryptedWallet.nonce());
             byte[] encrypted = Base64.getDecoder().decode(encryptedWallet.ciphertext());
@@ -75,11 +100,17 @@ public class ResearchCryptoService {
     }
 
     public String walletHash(String value) {
+        requireAvailable();
         return hmac(value, walletHashKey);
     }
 
     public String privacyHash(String value) {
+        requireAvailable();
         return hmac(value, privacyHashKey);
+    }
+
+    private void requireAvailable() {
+        if (!available) throw new IllegalStateException("Research crypto keys are unavailable");
     }
 
     private Cipher cipher(int mode, byte[] nonce) throws GeneralSecurityException {

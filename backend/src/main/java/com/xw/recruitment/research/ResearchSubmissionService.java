@@ -67,8 +67,7 @@ public class ResearchSubmissionService {
     @Transactional(readOnly = true)
     public CampaignResult publicCampaign() {
         ResearchCampaignEntity campaign = campaigns.findById(CAMPAIGN_ID).orElse(null);
-        String status = enabled && campaign != null && "ACTIVE".equals(campaign.getStatus())
-            ? "ACTIVE" : "PAUSED";
+        String status = effectiveCampaignStatus(campaign);
         String termsVersion = campaign == null ? "" : campaign.getTermsVersion();
         return new CampaignResult(DISPLAY_NAME, status, NETWORK, termsVersion);
     }
@@ -128,6 +127,7 @@ public class ResearchSubmissionService {
 
     @Transactional(readOnly = true)
     public ResearchListResponse searchResearch(ResearchFilters filters, int page, int size) {
+        requireCryptoAvailable();
         ResearchFilters safeFilters = filters == null ? ResearchFilters.empty() : filters;
         Page<ResearchSubmissionEntity> result = search(safeFilters,
             PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
@@ -139,11 +139,13 @@ public class ResearchSubmissionService {
 
     @Transactional(readOnly = true)
     public ResearchDetail researchDetail(long id) {
+        requireCryptoAvailable();
         return toDetail(requireSubmission(id));
     }
 
     @Transactional(readOnly = true)
     public ResearchDetail lookupResearchWallet(String walletAddress) {
+        requireCryptoAvailable();
         String normalized = walletAddress == null ? "" : walletAddress.trim();
         if (!addressValidator.isValid(normalized)) {
             throw new IllegalArgumentException("Invalid wallet address");
@@ -155,6 +157,7 @@ public class ResearchSubmissionService {
 
     @Transactional(readOnly = true)
     public String exportCsv(ResearchFilters filters) {
+        requireCryptoAvailable();
         ResearchFilters safeFilters = filters == null ? ResearchFilters.empty() : filters;
         List<ResearchSubmissionEntity> entities = search(safeFilters,
             Pageable.unpaged(Sort.by(Sort.Direction.DESC, "createdAt"))).getContent();
@@ -201,8 +204,8 @@ public class ResearchSubmissionService {
     public AdminCampaign adminCampaign() {
         ResearchCampaignEntity campaign = campaigns.findById(CAMPAIGN_ID)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return new AdminCampaign(campaign.getStatus(), campaign.getTermsVersion(),
-            campaign.getUpdatedAt());
+        return new AdminCampaign(campaign.getStatus(), effectiveCampaignStatus(campaign),
+            enabled, crypto.available(), campaign.getTermsVersion(), campaign.getUpdatedAt());
     }
 
     @Transactional
@@ -210,6 +213,11 @@ public class ResearchSubmissionService {
         if (status == null || !Set.of("ACTIVE", "PAUSED").contains(status)) {
             throw new IllegalArgumentException("Invalid campaign status");
         }
+        if ("ACTIVE".equals(status) && !enabled) {
+            throw ResearchApiException.conflict(
+                "RESEARCH_INTAKE_DISABLED", "Research intake is disabled by configuration");
+        }
+        if ("ACTIVE".equals(status)) requireCryptoAvailable();
         int updated = entityManager.createQuery("""
             update ResearchCampaignEntity campaign
                set campaign.status = :status, campaign.updatedAt = :updatedAt
@@ -344,6 +352,22 @@ public class ResearchSubmissionService {
         }
     }
 
+    private void requireCryptoAvailable() {
+        if (!crypto.available()) {
+            throw ResearchApiException.unavailable(
+                "RESEARCH_DATA_UNAVAILABLE", "Research encrypted data is unavailable");
+        }
+    }
+
+    private String effectiveCampaignStatus(ResearchCampaignEntity campaign) {
+        if (!enabled) return "DISABLED";
+        if (!crypto.available() || campaign == null) return "UNAVAILABLE";
+        if ("ACTIVE".equals(campaign.getStatus()) || "PAUSED".equals(campaign.getStatus())) {
+            return campaign.getStatus();
+        }
+        return "UNAVAILABLE";
+    }
+
     private NormalizedSubmission normalizeAndValidate(ResearchSubmissionRequest request) {
         if (!validator.validate(request).isEmpty()) {
             throw validationFailed();
@@ -446,7 +470,14 @@ public class ResearchSubmissionService {
         Instant createdAt
     ) {}
 
-    public record AdminCampaign(String status, String termsVersion, Instant updatedAt) {}
+    public record AdminCampaign(
+        String status,
+        String effectiveStatus,
+        boolean intakeEnabled,
+        boolean dataAvailable,
+        String termsVersion,
+        Instant updatedAt
+    ) {}
 
     private record NormalizedSubmission(String source, Set<String> scenes, String concern,
                                         String feedback, String walletAddress) {}
