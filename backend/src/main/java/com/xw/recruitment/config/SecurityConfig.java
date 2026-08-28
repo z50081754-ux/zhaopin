@@ -2,6 +2,8 @@ package com.xw.recruitment.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Clock;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,8 +22,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.List;
-
 @Configuration
 public class SecurityConfig {
     @Bean
@@ -30,6 +30,8 @@ public class SecurityConfig {
             .cors(cors -> {})
             .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET, "/api/research/campaign").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/research/submissions").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/applications", "/api/admin/login", "/api/visits", "/api/visits/*/heartbeat").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/jobs", "/api/jobs/**", "/api/site-settings").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -41,6 +43,11 @@ public class SecurityConfig {
             .logout(logout -> logout.logoutUrl("/api/admin/logout")
                 .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204)))
             .build();
+    }
+
+    @Bean
+    Clock clock() {
+        return Clock.systemUTC();
     }
 
     @Bean
