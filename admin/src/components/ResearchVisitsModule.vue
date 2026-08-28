@@ -24,6 +24,16 @@ type ResearchVisit = {
   submitted_research: boolean;
 };
 
+type VisitFilters = {
+  from: string;
+  to: string;
+  minDurationSeconds: number;
+  maxDurationSeconds: number | "";
+  submittedResearch: string;
+};
+
+type AppliedVisitFilters = Omit<VisitFilters, "maxDurationSeconds"> & { maxDurationSeconds: number };
+
 const props = defineProps<{ apiBase: string }>();
 const emit = defineEmits<{ unauthorized: [] }>();
 
@@ -34,7 +44,10 @@ const emptySummary = (): VisitSummary => ({
   submittedCount: 0,
   conversionRate: 0
 });
-const filters = reactive<{ from: string; to: string; minDurationSeconds: number; maxDurationSeconds: number | ""; submittedResearch: string }>({
+const draftFilters = reactive<VisitFilters>({
+  from: "", to: "", minDurationSeconds: 0, maxDurationSeconds: 86400, submittedResearch: "all"
+});
+const appliedFilters = ref<AppliedVisitFilters>({
   from: "", to: "", minDurationSeconds: 0, maxDurationSeconds: 86400, submittedResearch: "all"
 });
 const summary = ref<VisitSummary>(emptySummary());
@@ -56,6 +69,7 @@ function clearResults() {
   visits.value = [];
   total.value = 0;
   pages.value = 0;
+  page.value = 0;
 }
 
 function duration(value: number) {
@@ -78,33 +92,56 @@ async function request<T>(url: string, signal: AbortSignal): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function load() {
+function normalizeFilters(filters: VisitFilters): AppliedVisitFilters {
+  return {
+    from: filters.from,
+    to: filters.to,
+    minDurationSeconds: Math.max(0, Number(filters.minDurationSeconds) || 0),
+    maxDurationSeconds: filters.maxDurationSeconds === "" ? 86400 : Math.max(0, Number(filters.maxDurationSeconds) || 0),
+    submittedResearch: filters.submittedResearch
+  };
+}
+
+async function load(allowCorrection = true): Promise<void> {
   controller?.abort();
   const requestController = new AbortController();
   controller = requestController;
   const requestGeneration = ++generation;
+  const requestedPage = page.value;
+  const requestFilters = appliedFilters.value;
   loading.value = true;
   error.value = "";
   const listParams = new URLSearchParams({
     systemCode: "research",
-    page: String(page.value),
+    page: String(requestedPage),
     size: "20",
-    minDurationSeconds: String(Math.max(0, Number(filters.minDurationSeconds) || 0)),
-    maxDurationSeconds: String(filters.maxDurationSeconds === "" ? 86400 : Math.max(0, Number(filters.maxDurationSeconds) || 0)),
-    submittedResearch: filters.submittedResearch
+    minDurationSeconds: String(requestFilters.minDurationSeconds),
+    maxDurationSeconds: String(requestFilters.maxDurationSeconds),
+    submittedResearch: requestFilters.submittedResearch
   });
-  if (filters.from) listParams.set("from", filters.from);
-  if (filters.to) listParams.set("to", filters.to);
+  if (requestFilters.from) listParams.set("from", requestFilters.from);
+  if (requestFilters.to) listParams.set("to", requestFilters.to);
   try {
     const [nextSummary, nextList] = await Promise.all([
       request<VisitSummary>("/api/admin/visits/summary?systemCode=research", requestController.signal),
       request<{ visits: ResearchVisit[]; total: number; pages: number }>(`/api/admin/visits?${listParams}`, requestController.signal)
     ]);
     if (requestGeneration !== generation) return;
+    const nextPages = Math.max(0, nextList.pages || 0);
+    if (nextPages === 0) {
+      clearResults();
+      return;
+    }
+    if (requestedPage >= nextPages && allowCorrection) {
+      page.value = nextPages - 1;
+      await load(false);
+      return;
+    }
+    page.value = Math.min(requestedPage, nextPages - 1);
     summary.value = nextSummary;
     visits.value = nextList.visits || [];
     total.value = nextList.total || 0;
-    pages.value = nextList.pages || 0;
+    pages.value = nextPages;
   } catch (cause) {
     if (requestGeneration !== generation || requestController.signal.aborted) return;
     clearResults();
@@ -117,6 +154,7 @@ async function load() {
 
 function search() {
   page.value = 0;
+  appliedFilters.value = normalizeFilters(draftFilters);
   void load();
 }
 
@@ -154,11 +192,11 @@ onBeforeUnmount(() => {
     </section>
 
     <div class="research-visits-filters" aria-label="有效浏览筛选">
-      <label><span>开始</span><input v-model="filters.from" data-testid="visits-from" type="date"></label>
-      <label><span>结束</span><input v-model="filters.to" data-testid="visits-to" type="date"></label>
-      <label><span>时长 ≥</span><input v-model.number="filters.minDurationSeconds" data-testid="visits-min-duration" type="number" min="0"></label>
-      <label><span>时长 ≤</span><input v-model.number="filters.maxDurationSeconds" data-testid="visits-max-duration" type="number" min="0"></label>
-      <label><span>问卷</span><select v-model="filters.submittedResearch" data-testid="visits-submitted"><option value="all">全部</option><option value="true">已提交</option><option value="false">未提交</option></select></label>
+      <label><span>开始</span><input v-model="draftFilters.from" data-testid="visits-from" type="date"></label>
+      <label><span>结束</span><input v-model="draftFilters.to" data-testid="visits-to" type="date"></label>
+      <label><span>时长 ≥</span><input v-model.number="draftFilters.minDurationSeconds" data-testid="visits-min-duration" type="number" min="0"></label>
+      <label><span>时长 ≤</span><input v-model.number="draftFilters.maxDurationSeconds" data-testid="visits-max-duration" type="number" min="0"></label>
+      <label><span>问卷</span><select v-model="draftFilters.submittedResearch" data-testid="visits-submitted"><option value="all">全部</option><option value="true">已提交</option><option value="false">未提交</option></select></label>
       <button type="button" data-testid="visits-search" @click="search">查询</button>
     </div>
 
@@ -180,12 +218,12 @@ onBeforeUnmount(() => {
         </tbody>
       </table>
     </div>
-    <div class="research-pagination" aria-label="有效浏览分页">
-      <span data-testid="visits-page-status">第 {{ pages ? page + 1 : 0 }} / {{ pages }} 页 · 共 <b>{{ total }}</b> 条</span>
+    <nav class="research-pagination" aria-label="有效浏览分页">
+      <span data-testid="visits-page-status" aria-live="polite" aria-atomic="true">第 {{ pages ? page + 1 : 0 }} / {{ pages }} 页 · 共 <b>{{ total }}</b> 条</span>
       <div>
         <button type="button" data-testid="visits-previous" :disabled="loading || page === 0" @click="goToPage(page - 1)">← 上一页</button>
         <button type="button" data-testid="visits-next" :disabled="loading || pages === 0 || page >= pages - 1" @click="goToPage(page + 1)">下一页 →</button>
       </div>
-    </div>
+    </nav>
   </section>
 </template>

@@ -124,6 +124,8 @@ describe("ResearchVisitsModule", () => {
     await flushPromises();
 
     expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 1 / 2 页 · 共 21 条");
+    expect(wrapper.find("nav[aria-label='有效浏览分页']").exists()).toBe(true);
+    expect(wrapper.get("[data-testid='visits-page-status']").attributes("aria-live")).toBe("polite");
     expect(wrapper.get("[data-testid='visits-previous']").attributes("disabled")).toBeDefined();
     await wrapper.get("[data-testid='visits-next']").trigger("click");
     await flushPromises();
@@ -163,6 +165,100 @@ describe("ResearchVisitsModule", () => {
       expect.objectContaining({ credentials: "include" })
     );
     expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 1 / 2 页");
+  });
+
+  it("keeps edited draft filters out of pagination until search applies their normalized snapshot", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/summary")) return response(summary);
+      return response({ ...list, total: 41, pages: 3 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='visits-from']").setValue("2026-08-01");
+    await wrapper.get("[data-testid='visits-to']").setValue("2026-08-29");
+    await wrapper.get("[data-testid='visits-min-duration']").setValue("60");
+    await wrapper.get("[data-testid='visits-max-duration']").setValue("");
+    await wrapper.get("[data-testid='visits-submitted']").setValue("false");
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+      expect.objectContaining({ credentials: "include" })
+    );
+    await wrapper.get("[data-testid='visits-search']").trigger("click");
+    await flushPromises();
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/visits?systemCode=research&page=0&size=20&minDurationSeconds=60&maxDurationSeconds=86400&submittedResearch=false&from=2026-08-01&to=2026-08-29",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
+  it("corrects a delayed out-of-range page exactly once and ignores its late result after a new search", async () => {
+    const shrunkenPage = deferred<ReturnType<typeof response>>();
+    const correction = deferred<ReturnType<typeof response>>();
+    let pageOneRequests = 0;
+    const fetch = vi.fn((url: string) => {
+      if (url.includes("/summary")) return Promise.resolve(response(summary));
+      const requestUrl = new URL(url, "https://admin.test");
+      const requestedPage = requestUrl.searchParams.get("page");
+      const minDuration = requestUrl.searchParams.get("minDurationSeconds");
+      if (minDuration === "60") return Promise.resolve(response({ visits: [{ ...visit, id: 60, duration_seconds: 60 }], total: 1, pages: 1 }));
+      if (requestedPage === "2") return shrunkenPage.promise;
+      if (requestedPage === "1") {
+        pageOneRequests += 1;
+        return pageOneRequests === 1
+          ? Promise.resolve(response({ visits: [{ ...visit, id: 21 }], total: 41, pages: 3 }))
+          : correction.promise;
+      }
+      return Promise.resolve(response({ ...list, total: 41, pages: 3 }));
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    shrunkenPage.resolve(response({ visits: [], total: 21, pages: 2 }));
+    await flushPromises();
+
+    const listUrlsAfterCorrection = fetch.mock.calls.map(([url]) => String(url)).filter(url => url.includes("/api/admin/visits?"));
+    expect(listUrlsAfterCorrection).toEqual([
+      "/api/admin/visits?systemCode=research&page=0&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+      "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+      "/api/admin/visits?systemCode=research&page=2&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+      "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all"
+    ]);
+
+    await wrapper.get("[data-testid='visits-min-duration']").setValue("60");
+    await wrapper.get("[data-testid='visits-search']").trigger("click");
+    await flushPromises();
+    correction.resolve(response({ visits: [{ ...visit, id: 99, entry_path: "/stale-correction" }], total: 21, pages: 2 }));
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='research-visit-row-60']").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("/stale-correction");
+  });
+
+  it("resets to page zero with disabled controls when a page request fails", async () => {
+    let pageOne = false;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/summary")) return response(summary);
+      if (pageOne) return response({}, 500);
+      return response({ ...list, total: 21, pages: 2 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+    pageOne = true;
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 0 / 0 页 · 共 0 条");
+    expect(wrapper.get("[data-testid='visits-previous']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='visits-next']").attributes("disabled")).toBeDefined();
   });
 
   it("renders the actual metrics and complete research visit fields", async () => {
