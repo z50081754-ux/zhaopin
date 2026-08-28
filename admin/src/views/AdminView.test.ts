@@ -193,6 +193,36 @@ describe("AdminView subsystem shell", () => {
     expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
   });
 
+  it("keeps research visit and submission history isolated from other admin APIs", async () => {
+    const { fetch, wrapper } = mountAdmin("/admin/research/visits");
+    await flushPromises();
+
+    const researchNavigation = wrapper.get(".admin-modules");
+    expect(researchNavigation.text()).toContain("有效浏览");
+    expect(researchNavigation.text()).toContain("调研记录");
+    expect(wrapper.text()).toContain("SakuraPay 调研有效浏览统计将在下一阶段上线。");
+    expect(wrapper.find(".research-module").exists()).toBe(false);
+    expect(wrapper.get(".admin-header-actions a").attributes("href")).toBe("https://sakurapay.xw-company.com/");
+
+    await researchNavigation.get("button:nth-child(2)").trigger("click");
+    await flushPromises();
+    expect(window.location.pathname).toBe("/admin/research/submissions");
+    expect(wrapper.find(".research-module").exists()).toBe(true);
+
+    window.history.replaceState({}, "", "/admin/research/visits");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flushPromises();
+    expect(wrapper.text()).toContain("SakuraPay 调研有效浏览统计将在下一阶段上线。");
+    expect(wrapper.find(".research-module").exists()).toBe(false);
+
+    window.history.replaceState({}, "", "/admin/research/submissions");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flushPromises();
+    expect(wrapper.find(".research-module").exists()).toBe(true);
+    const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
+  });
+
   it("keeps research out of the recruitment navigation", async () => {
     const { wrapper } = mountAdmin("/admin/recruitment");
     await flushPromises();
