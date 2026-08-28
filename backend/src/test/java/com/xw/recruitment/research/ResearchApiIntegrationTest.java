@@ -59,7 +59,7 @@ class ResearchApiIntegrationTest {
         service.submit(request("OPEN_CARD", 5, Set.of("TRAVEL", "SHOPPING"),
             "SECURITY", "透明，快速\n到账", WALLET_ONE), "192.0.2.1", "admin-api-test-1");
         service.submit(request("APP_DOWNLOAD", 4, Set.of("GAMING"),
-            "FEES", "=SUM(1,2) \"清晰\"", WALLET_TWO), "192.0.2.2", "admin-api-test-2");
+            "FEES", "=SUM(1,2) \"清晰\"\n第二行", WALLET_TWO), "192.0.2.2", "admin-api-test-2");
         service.submit(request("FREE_CARD", 3, Set.of("ATM"),
             "SPEED", "Good", WALLET_THREE), "192.0.2.3", "admin-api-test-3");
 
@@ -112,6 +112,24 @@ class ResearchApiIntegrationTest {
     }
 
     @Test
+    void rejectsMalformedFromDateInList() throws Exception {
+        mockMvc.perform(get("/api/admin/research/submissions")
+                .with(user("admin").roles("ADMIN"))
+                .param("from", "not-a-date"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void rejectsMalformedToDateInExport() throws Exception {
+        mockMvc.perform(get("/api/admin/research/submissions/export")
+                .with(user("admin").roles("ADMIN"))
+                .param("to", "2026-02-30"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
     void decryptsWalletOnlyForProtectedDetailAndExactLookup() throws Exception {
         mockMvc.perform(get("/api/admin/research/submissions/{id}", seeded.get(0).getId())
                 .with(user("admin").roles("ADMIN")))
@@ -139,9 +157,26 @@ class ResearchApiIntegrationTest {
                 "attachment; filename=web3-wallet-research.csv"))
             .andExpect(content().contentType("text/csv;charset=UTF-8"))
             .andExpect(content().string(containsString("\uFEFFsubmission number,source,rating,scenes,concern,feedback,network,full wallet address,terms version,consent time,created time")))
-            .andExpect(content().string(containsString("\"'=SUM(1,2) \"\"清晰\"\"\"")))
+            .andExpect(content().string(containsString("\"'=SUM(1,2) \"\"清晰\"\"\n第二行\"")))
             .andExpect(content().string(containsString(WALLET_TWO)))
             .andExpect(content().string(not(containsString(WALLET_ONE))));
+    }
+
+    @Test
+    void neutralizesAllCsvFormulaPrefixesIncludingLeadingWhitespace() throws Exception {
+        jdbc.update("UPDATE research_submissions SET feedback = ? WHERE id = ?",
+            "+1+1", seeded.get(0).getId());
+        jdbc.update("UPDATE research_submissions SET feedback = ? WHERE id = ?",
+            "-2+2", seeded.get(1).getId());
+        jdbc.update("UPDATE research_submissions SET feedback = ? WHERE id = ?",
+            " @SUM(A1:A2)", seeded.get(2).getId());
+
+        mockMvc.perform(get("/api/admin/research/submissions/export")
+                .with(user("admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("'+1+1")))
+            .andExpect(content().string(containsString("'-2+2")))
+            .andExpect(content().string(containsString("' @SUM(A1:A2)")));
     }
 
     @Test
@@ -190,7 +225,7 @@ class ResearchApiIntegrationTest {
     }
 
     @Test
-    void readsAndUpdatesCampaignWithoutChangingTermsVersion() throws Exception {
+    void readsAndUpdatesCampaignFromActiveToPausedWithoutChangingTermsVersion() throws Exception {
         jdbc.update("UPDATE research_campaign SET updated_at = ? WHERE id = 1",
             Timestamp.from(Instant.parse("2020-01-01T00:00:00Z")));
 
@@ -203,11 +238,38 @@ class ResearchApiIntegrationTest {
         mockMvc.perform(put("/api/admin/research/campaign")
                 .with(user("admin").roles("ADMIN"))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"ACTIVE\"}"))
+                .content("{\"status\":\"PAUSED\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.status").value("PAUSED"))
             .andExpect(jsonPath("$.termsVersion").value("2026-08-01"))
             .andExpect(jsonPath("$.updatedAt").value(not("2020-01-01T00:00:00Z")));
+    }
+
+    @Test
+    void rejectsUnsupportedCampaignStatus() throws Exception {
+        mockMvc.perform(put("/api/admin/research/campaign")
+                .with(user("admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"ENDED\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    void rejectsMissingAndNullCampaignStatus() throws Exception {
+        mockMvc.perform(put("/api/admin/research/campaign")
+                .with(user("admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        mockMvc.perform(put("/api/admin/research/campaign")
+                .with(user("admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":null}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     private ResearchSubmissionRequest request(String source, int rating, Set<String> scenes,

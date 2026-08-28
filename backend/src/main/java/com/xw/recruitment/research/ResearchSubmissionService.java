@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -206,7 +207,7 @@ public class ResearchSubmissionService {
 
     @Transactional
     public AdminCampaign updateCampaign(String status) {
-        if (!Set.of("ACTIVE", "PAUSED").contains(status)) {
+        if (status == null || !Set.of("ACTIVE", "PAUSED").contains(status)) {
             throw new IllegalArgumentException("Invalid campaign status");
         }
         int updated = entityManager.createQuery("""
@@ -286,14 +287,22 @@ public class ResearchSubmissionService {
         if (value == null || value.isBlank()) {
             return Instant.EPOCH;
         }
-        return LocalDate.parse(value).atStartOfDay(ZoneOffset.UTC).toInstant();
+        return parseDate(value).atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 
     private Instant nextDay(String value) {
         if (value == null || value.isBlank()) {
             return MAX_SEARCH_TIME;
         }
-        return LocalDate.parse(value).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        return parseDate(value).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    }
+
+    private LocalDate parseDate(String value) {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException exception) {
+            throw new IllegalArgumentException("Invalid date", exception);
+        }
     }
 
     private String csvRow(List<String> values) {
