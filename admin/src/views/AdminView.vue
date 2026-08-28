@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import XwLogo from "../components/XwLogo.vue";
+import ResearchModule from "../components/ResearchModule.vue";
 
 type Application = {
   id:number; application_no:string; resume_name:string; telegram:string; gender:string; age:string;
@@ -40,7 +41,7 @@ const apiUrl=(path:string)=>`${API_BASE}${path}`;
 const account=ref(""), password=ref(""), authenticated=ref(false), loading=ref(false), error=ref("");
 type SiteTemplate="technology"|"apple";
 type DefaultLanguage="auto"|"zh"|"en";
-const activeModule=ref<"applications"|"visits"|"jobs"|"templates">("applications"), query=ref(""), stage=ref("");
+const activeModule=ref<"applications"|"visits"|"jobs"|"templates"|"research">("applications"), query=ref(""), stage=ref("");
 const referrerQuery=ref(""), createdFrom=ref(""), createdTo=ref(""), operatingSystemQuery=ref(""), deviceModelQuery=ref("");
 const applications=ref<Application[]>([]), selectedApplication=ref<ApplicationDetail|null>(null);
 const selectedApplicationIds=ref<number[]>([]);
@@ -269,9 +270,9 @@ async function selectDefaultLanguage(value:DefaultLanguage){
     defaultLanguage.value=result.defaultLanguage;templateMessage.value="默认语言已保存，仅影响尚未手动选择过语言的访客。";
   }catch(e){error.value=`默认语言保存失败：${(e as Error).message}`}finally{templateSaving.value=false}
 }
-function switchModule(module:"applications"|"visits"|"jobs"|"templates"){
+function switchModule(module:"applications"|"visits"|"jobs"|"templates"|"research"){
   activeModule.value=module;
-  if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else void loadApplications();
+  if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else if(module==="applications")void loadApplications();
 }
 onMounted(loadApplications);
 </script>
@@ -296,6 +297,7 @@ onMounted(loadApplications);
           <button :class="{active:activeModule==='visits'}" @click="switchModule('visits')">有效浏览</button>
           <button :class="{active:activeModule==='jobs'}" @click="switchModule('jobs')">岗位管理</button>
           <button :class="{active:activeModule==='templates'}" @click="switchModule('templates')">官网模板</button>
+          <button :class="{active:activeModule==='research'}" @click="switchModule('research')">web3钱包产品调研</button>
         </nav>
         <template v-if="activeModule==='applications'">
           <div class="admin-title"><div><small>APPLICATION PIPELINE</small><h1>候选人投递</h1></div><b>{{String(filteredCount).padStart(2,"0")}}</b></div>
@@ -414,6 +416,7 @@ onMounted(loadApplications);
             <button v-if="!filteredJobs.length&&!loading" class="admin-job-empty" @click="jobStatusFilter==='all'&&newJob()">{{jobs.length?'当前筛选下暂无岗位':'还没有后台岗位，创建第一个岗位'}}</button>
           </div>
         </template>
+        <ResearchModule v-else-if="activeModule==='research'" :api-base="API_BASE" />
         <template v-else>
           <div class="admin-title"><div><small>WEBSITE APPEARANCE</small><h1>官网模板</h1></div><a class="template-preview-link" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">打开官网预览 ↗</a></div>
           <p class="template-intro">选择招聘官网首页的视觉风格。启用后立即保存到数据库，所有访客刷新首页后都会看到新的模板。</p>

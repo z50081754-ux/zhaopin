@@ -18,5 +18,8 @@ export default defineConfig({
       }
     }
   },
+  test: {
+    environment: "jsdom"
+  },
   build: { outDir: "dist", emptyOutDir: true }
 });
