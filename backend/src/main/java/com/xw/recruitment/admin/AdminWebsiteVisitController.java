@@ -66,14 +66,17 @@ public class AdminWebsiteVisitController {
         @JsonProperty("user_agent") String userAgent,
         @JsonProperty("detected_wallets") String detectedWallets,
         @JsonProperty("system_code") String systemCode,
-        @JsonProperty("queried_address") boolean queriedAddress
+        @JsonProperty("queried_address") boolean queriedAddress,
+        @JsonProperty("submitted_research") boolean submittedResearch,
+        @JsonProperty("visitor_country") String visitorCountry
     ) {
         static VisitItem from(WebsiteVisitEntity visit) {
             return new VisitItem(visit.getId(), visit.getVisitId(), visit.getStartedAt(), visit.getQualifiedAt(),
                 visit.getLastSeenAt(), visit.getDurationSeconds(), visit.getIpAddress(), visit.getEntryPath(), visit.getLastPath(),
                 visit.getDeviceType(), visit.getDeviceModel(), visit.getOperatingSystem(), visit.getBrowserName(),
                 visit.getScreenResolution(), visit.getDeviceLanguage(), visit.getDeviceTimezone(), visit.getUserAgent(),
-                visit.getDetectedWallets(), visit.getSystemCode(), visit.isQueriedAddress());
+                visit.getDetectedWallets(), visit.getSystemCode(), visit.isQueriedAddress(), visit.isSubmittedResearch(),
+                visit.getVisitorCountry());
         }
     }
 }

@@ -36,6 +36,10 @@ public class WebsiteVisitEntity {
     private String systemCode = "recruitment";
     @Column(name = "queried_address", nullable = false)
     private boolean queriedAddress = false;
+    @Column(name = "submitted_research", nullable = false)
+    private boolean submittedResearch = false;
+    @Column(name = "visitor_country", nullable = false, length = 16)
+    private String visitorCountry = "UNKNOWN";
 
     protected WebsiteVisitEntity() {}
 
@@ -78,4 +82,8 @@ public class WebsiteVisitEntity {
     public void setSystemCode(String value) { systemCode = value; }
     public boolean isQueriedAddress() { return queriedAddress; }
     public void setQueriedAddress(boolean value) { queriedAddress = value; }
+    public boolean isSubmittedResearch() { return submittedResearch; }
+    public void setSubmittedResearch(boolean value) { submittedResearch = value; }
+    public String getVisitorCountry() { return visitorCountry; }
+    public void setVisitorCountry(String value) { visitorCountry = value; }
 }

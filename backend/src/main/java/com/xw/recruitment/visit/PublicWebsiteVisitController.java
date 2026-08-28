@@ -23,7 +23,7 @@ public class PublicWebsiteVisitController {
         HttpServletRequest httpRequest
     ) {
         WebsiteVisitService.QualifyResult result = service.qualify(
-            VisitSystem.RECRUITMENT, request, regionResolver.ipAddress(httpRequest));
+            VisitSystem.RECRUITMENT, request, regionResolver.ipAddress(httpRequest), regionResolver.country(httpRequest));
         return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
     }
 
@@ -42,7 +42,7 @@ public class PublicWebsiteVisitController {
         HttpServletRequest httpRequest
     ) {
         WebsiteVisitService.QualifyResult result = service.qualify(
-            VisitSystem.WALLETCHECK, request, regionResolver.ipAddress(httpRequest));
+            VisitSystem.WALLETCHECK, request, regionResolver.ipAddress(httpRequest), regionResolver.country(httpRequest));
         return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
     }
 
@@ -52,6 +52,25 @@ public class PublicWebsiteVisitController {
         @RequestBody WebsiteVisitService.HeartbeatRequest request
     ) {
         service.heartbeat(VisitSystem.WALLETCHECK, visitId, request);
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/research")
+    public Map<String, Boolean> qualifyResearch(
+        @RequestBody WebsiteVisitService.VisitRequest request,
+        HttpServletRequest httpRequest
+    ) {
+        WebsiteVisitService.QualifyResult result = service.qualify(
+            VisitSystem.RESEARCH, request, regionResolver.ipAddress(httpRequest), regionResolver.country(httpRequest));
+        return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
+    }
+
+    @PostMapping("/research/{visitId}/heartbeat")
+    public Map<String, Boolean> heartbeatResearch(
+        @PathVariable String visitId,
+        @RequestBody WebsiteVisitService.HeartbeatRequest request
+    ) {
+        service.heartbeat(VisitSystem.RESEARCH, visitId, request);
         return Map.of("ok", true);
     }
 }

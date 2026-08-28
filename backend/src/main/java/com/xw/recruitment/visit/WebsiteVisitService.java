@@ -22,15 +22,28 @@ public class WebsiteVisitService {
 
     @Transactional
     public synchronized QualifyResult qualify(VisitRequest request, String ipAddress) {
-        return qualify(VisitSystem.RECRUITMENT, request, ipAddress);
+        return qualify(VisitSystem.RECRUITMENT, request, ipAddress, "UNKNOWN");
     }
 
     @Transactional
     public synchronized QualifyResult qualify(VisitSystem system, VisitRequest request, String ipAddress) {
+        return qualify(system, request, ipAddress, "UNKNOWN");
+    }
+
+    @Transactional
+    public synchronized QualifyResult qualify(
+        VisitSystem system,
+        VisitRequest request,
+        String ipAddress,
+        String visitorCountry
+    ) {
         requireSystem(system);
         validateVisitId(request.visitId());
         int duration = boundedDuration(request.durationSeconds());
-        if (duration < 15) throw new IllegalArgumentException("Visit must be at least 15 seconds.");
+        if (duration < system.qualificationSeconds()) {
+            throw new IllegalArgumentException(
+                "Visit must be at least " + system.qualificationSeconds() + " seconds.");
+        }
         Instant now = Instant.now();
         WebsiteVisitEntity visit = repository.findByVisitId(request.visitId()).orElse(null);
         if (visit != null && !system.code().equals(visit.getSystemCode())) {
@@ -45,6 +58,7 @@ public class WebsiteVisitService {
             visit.setStartedAt(now.minusSeconds(duration));
             visit.setQualifiedAt(now);
             visit.setIpAddress(clean(ipAddress, 64));
+            visit.setVisitorCountry(clean(visitorCountry, 16));
             visit.setEntryPath(normalizePath(system, request.entryPath()));
             visit.setDeviceType(clean(request.deviceType(), 80));
             visit.setDeviceModel(clean(request.deviceModel(), 200));
@@ -59,11 +73,12 @@ public class WebsiteVisitService {
             visit.setLastPath(normalizePath(system, request.lastPath()));
             visit.setLastSeenAt(now);
             visit.setQueriedAddress(request.queriedAddress());
+            visit.setSubmittedResearch(request.submittedResearch());
             repository.save(visit);
         } else {
             repository.mergeVisitState(
                 system.code(), request.visitId(), duration, normalizePath(system, request.lastPath()), now,
-                request.queriedAddress());
+                request.queriedAddress(), request.submittedResearch());
         }
         return new QualifyResult(true, false);
     }
@@ -82,7 +97,7 @@ public class WebsiteVisitService {
         if (!system.code().equals(visit.getSystemCode())) throw new IllegalArgumentException("Visit system does not match.");
         int updated = repository.mergeVisitState(
             system.code(), visitId, boundedDuration(request.durationSeconds()), normalizePath(system, request.lastPath()),
-            Instant.now(), request.queriedAddress());
+            Instant.now(), request.queriedAddress(), request.submittedResearch());
         if (updated != 1) throw new IllegalArgumentException("Visit not found.");
         return repository.findByVisitId(visitId)
             .orElseThrow(() -> new IllegalArgumentException("Visit not found."));
@@ -150,7 +165,11 @@ public class WebsiteVisitService {
     }
 
     private String normalizePath(VisitSystem system, String value) {
-        return system == VisitSystem.WALLETCHECK ? normalizeWalletCheckPath(value) : normalizeRecruitmentPath(value);
+        return switch (system) {
+            case WALLETCHECK -> normalizeWalletCheckPath(value);
+            case RESEARCH -> normalizeResearchPath(value);
+            case RECRUITMENT -> normalizeRecruitmentPath(value);
+        };
     }
 
     private String normalizeRecruitmentPath(String value) {
@@ -185,6 +204,11 @@ public class WebsiteVisitService {
         return "/";
     }
 
+    private String normalizeResearchPath(String value) {
+        String path = stripQueryAndFragment(clean(value, 500));
+        return path.equals("/") ? path : "/";
+    }
+
     private String stripQueryAndFragment(String value) {
         int query = value.indexOf('?');
         int fragment = value.indexOf('#');
@@ -198,8 +222,19 @@ public class WebsiteVisitService {
         String visitId, int durationSeconds, String entryPath, String lastPath,
         String deviceType, String deviceModel, String operatingSystem, String browserName,
         String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
-        List<String> detectedWallets, boolean queriedAddress
+        List<String> detectedWallets, boolean queriedAddress, boolean submittedResearch
     ) {
+        public VisitRequest(
+            String visitId, int durationSeconds, String entryPath, String lastPath,
+            String deviceType, String deviceModel, String operatingSystem, String browserName,
+            String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
+            List<String> detectedWallets, boolean queriedAddress
+        ) {
+            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, detectedWallets,
+                queriedAddress, false);
+        }
+
         public VisitRequest(
             String visitId, int durationSeconds, String entryPath, String lastPath,
             String deviceType, String deviceModel, String operatingSystem, String browserName,
@@ -207,7 +242,7 @@ public class WebsiteVisitService {
             List<String> detectedWallets
         ) {
             this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
-                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, detectedWallets, false);
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, detectedWallets, false, false);
         }
 
         public VisitRequest(
@@ -216,12 +251,16 @@ public class WebsiteVisitService {
             String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent
         ) {
             this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
-                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, List.of(), false);
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, List.of(), false, false);
         }
     }
-    public record HeartbeatRequest(int durationSeconds, String lastPath, boolean queriedAddress) {
+    public record HeartbeatRequest(int durationSeconds, String lastPath, boolean queriedAddress, boolean submittedResearch) {
+        public HeartbeatRequest(int durationSeconds, String lastPath, boolean queriedAddress) {
+            this(durationSeconds, lastPath, queriedAddress, false);
+        }
+
         public HeartbeatRequest(int durationSeconds, String lastPath) {
-            this(durationSeconds, lastPath, false);
+            this(durationSeconds, lastPath, false, false);
         }
     }
     public record QualifyResult(boolean tracked, boolean duplicate) {}

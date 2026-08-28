@@ -33,6 +33,10 @@ public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity
                visit.queriedAddress = case
                    when visit.queriedAddress = true or :queriedAddress = true then true
                    else false
+               end,
+               visit.submittedResearch = case
+                   when visit.submittedResearch = true or :submittedResearch = true then true
+                   else false
                end
          where visit.systemCode = :systemCode
            and visit.visitId = :visitId
@@ -43,8 +47,21 @@ public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity
         @Param("durationSeconds") int durationSeconds,
         @Param("lastPath") String lastPath,
         @Param("lastSeenAt") Instant lastSeenAt,
-        @Param("queriedAddress") boolean queriedAddress
+        @Param("queriedAddress") boolean queriedAddress,
+        @Param("submittedResearch") boolean submittedResearch
     );
+
+    default int mergeVisitState(
+        String systemCode,
+        String visitId,
+        int durationSeconds,
+        String lastPath,
+        Instant lastSeenAt,
+        boolean queriedAddress
+    ) {
+        return mergeVisitState(
+            systemCode, visitId, durationSeconds, lastPath, lastSeenAt, queriedAddress, false);
+    }
 
     Page<WebsiteVisitEntity> findAllBySystemCodeAndDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
         String systemCode,
