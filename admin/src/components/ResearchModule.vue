@@ -333,7 +333,7 @@ onMounted(() => void loadDashboard());
       </div>
     </div>
 
-    <p class="research-description">管理问卷收集记录。列表仅显示脱敏钱包地址；完整地址仅在详情、精确查找和 CSV 导出中提供。</p>
+    <p class="research-description">管理问卷收集记录。列表直接显示完整收款地址，也可通过精确查找、详情和 CSV 导出进行后续处理。</p>
     <p v-if="error" class="admin-error" role="alert">{{ error }}</p>
     <p v-if="campaign && !campaign.dataAvailable" class="admin-error" role="alert">
       加密数据不可用：请配置完整且相互独立的调研密钥后再读取受保护数据。
@@ -374,14 +374,14 @@ onMounted(() => void loadDashboard());
       </div>
     </section>
 
-    <p class="research-scroll-tip">← 左右滑动查看记录；使用“查看详情”读取受保护的完整详情 →</p>
+    <p class="research-scroll-tip">← 左右滑动查看完整记录和收款地址；“查看详情”可读取其余受保护信息 →</p>
     <div class="research-table-wrap">
       <table class="research-table">
-        <thead><tr><th><input type="checkbox" :checked="allOnPageSelected" aria-label="选择本页调研记录" @change="toggleAll"></th><th>提交编号</th><th>来源</th><th>评分</th><th>场景</th><th>顾虑</th><th>反馈</th><th>钱包地址（脱敏）</th><th>提交时间</th><th>操作</th></tr></thead>
+        <thead><tr><th><input type="checkbox" :checked="allOnPageSelected" aria-label="选择本页调研记录" @change="toggleAll"></th><th>提交编号</th><th>来源</th><th>评分</th><th>场景</th><th>顾虑</th><th>反馈</th><th>完整收款地址</th><th>提交时间</th><th>操作</th></tr></thead>
         <tbody>
           <tr v-for="submission in submissions" :key="submission.id" :data-testid="`research-row-${submission.id}`">
             <td><input v-model="selectedSubmissionIds" :data-testid="`select-submission-${submission.id}`" :value="submission.id" type="checkbox" :aria-label="`选择调研记录 ${submission.submissionNumber}`" @click.stop></td>
-            <td><b>{{ submission.submissionNumber }}</b></td><td>{{ submission.source }}</td><td>{{ submission.rating }} 分</td><td>{{ submission.scenes.join("、") }}</td><td>{{ submission.concern }}</td><td>{{ display(submission.feedback) }}</td><td>{{ submission.maskedWalletAddress }}</td><td>{{ formatDate(submission.createdAt) }}</td>
+            <td><b>{{ submission.submissionNumber }}</b></td><td>{{ submission.source }}</td><td>{{ submission.rating }} 分</td><td>{{ submission.scenes.join("、") }}</td><td>{{ submission.concern }}</td><td>{{ display(submission.feedback) }}</td><td class="research-full-wallet">{{ submission.walletAddress }}</td><td>{{ formatDate(submission.createdAt) }}</td>
             <td class="research-row-actions"><button :data-testid="`research-detail-button-${submission.id}`" class="research-detail" type="button" @click="openDetail(submission, $event)">查看详情</button><button class="research-delete research-delete-one" type="button" :disabled="loading" @click="deleteOne(submission)">删除</button></td>
           </tr>
           <tr v-if="!listLoading && !submissions.length"><td colspan="10" class="research-empty">暂无符合条件的调研记录</td></tr>

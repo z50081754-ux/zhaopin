@@ -33,7 +33,7 @@ const fixture = {
   scenes: ["TRAVEL"],
   concern: "SECURITY",
   feedback: "费用透明",
-  maskedWalletAddress: "TJRabP••••••pRTv8",
+  walletAddress: "TJRabP1oZkX5wX6u5h5R6xSzz9gYpRTv8",
   createdAt: "2026-08-28T00:00:00Z"
 };
 
@@ -215,18 +215,11 @@ describe("ResearchModule", () => {
     expect(wrapper.text()).toContain("SP-20260828-ABC12345");
   });
 
-  it("keeps wallets masked in the table and reveals the full address only in the opened detail drawer", async () => {
+  it("shows the full wallet address directly in the table", async () => {
     const wrapper = mount(ResearchModule, { props: { apiBase: "" } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain("TJRabP••••••pRTv8");
-    expect(wrapper.text()).not.toContain("TJRabP1oZkX5wX6u5h5R6xSzz9gYpRTv8");
-
-    await wrapper.get("[data-testid='research-detail-button-1']").trigger("click");
-    await flushPromises();
-
-    expect(loadResearchDetail).toHaveBeenCalledWith("", 1);
-    expect(wrapper.get("[data-testid='research-detail-drawer']").text())
+    expect(wrapper.get("[data-testid='research-row-1']").text())
       .toContain("TJRabP1oZkX5wX6u5h5R6xSzz9gYpRTv8");
   });
 

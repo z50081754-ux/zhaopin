@@ -101,9 +101,7 @@ class ResearchDisabledIntegrationTest {
         mockMvc.perform(get("/api/admin/research/submissions")
                 .with(user("admin").roles("ADMIN")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.submissions[0].maskedWalletAddress")
-                .value("TJRabP••••••pRTv8"))
-            .andExpect(content().string(not(containsString(WALLET))));
+            .andExpect(jsonPath("$.submissions[0].walletAddress").value(WALLET));
 
         mockMvc.perform(get("/api/admin/research/submissions/{id}", id)
                 .with(user("admin").roles("ADMIN")))

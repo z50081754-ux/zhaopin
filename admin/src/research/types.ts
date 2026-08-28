@@ -9,7 +9,7 @@ export type ResearchSubmission = {
   scenes: string[];
   concern: string;
   feedback: string;
-  maskedWalletAddress: string;
+  walletAddress: string;
   createdAt: string;
 };
 
@@ -31,9 +31,8 @@ export type ResearchCampaign = {
   updatedAt: string;
 };
 
-export type ResearchDetail = Omit<ResearchSubmission, "maskedWalletAddress"> & {
+export type ResearchDetail = ResearchSubmission & {
   walletNetwork: string;
-  walletAddress: string;
   termsVersion: string;
   consentedAt: string;
 };

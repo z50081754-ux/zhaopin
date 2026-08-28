@@ -89,7 +89,7 @@ class ResearchApiIntegrationTest {
     }
 
     @Test
-    void filtersAndPaginatesMaskedListItems() throws Exception {
+    void filtersAndPaginatesListItemsWithFullWalletAddresses() throws Exception {
         String numberFragment = seeded.get(1).getSubmissionNumber().substring(3, 11);
 
         mockMvc.perform(get("/api/admin/research/submissions")
@@ -107,8 +107,7 @@ class ResearchApiIntegrationTest {
             .andExpect(jsonPath("$.total").value(1))
             .andExpect(jsonPath("$.pages").value(1))
             .andExpect(jsonPath("$.submissions[0].id").value(seeded.get(1).getId()))
-            .andExpect(jsonPath("$.submissions[0].maskedWalletAddress").value("TXLAQ6••••••Eqcdj"))
-            .andExpect(content().string(not(containsString(WALLET_TWO))));
+            .andExpect(jsonPath("$.submissions[0].walletAddress").value(WALLET_TWO));
     }
 
     @Test

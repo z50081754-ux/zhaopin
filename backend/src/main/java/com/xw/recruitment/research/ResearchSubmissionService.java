@@ -258,7 +258,7 @@ public class ResearchSubmissionService {
         String walletAddress = decryptWallet(entity);
         return new ResearchListItem(entity.getId(), entity.getSubmissionNumber(),
             entity.getSource(), entity.getRating(), sortedScenes(entity), entity.getConcern(),
-            entity.getFeedback(), maskWallet(walletAddress), entity.getCreatedAt());
+            entity.getFeedback(), walletAddress, entity.getCreatedAt());
     }
 
     private ResearchDetail toDetail(ResearchSubmissionEntity entity) {
@@ -451,7 +451,7 @@ public class ResearchSubmissionService {
         List<String> scenes,
         String concern,
         String feedback,
-        String maskedWalletAddress,
+        String walletAddress,
         Instant createdAt
     ) {}
 
