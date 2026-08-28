@@ -14,6 +14,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 public class WebsiteVisitService {
@@ -174,6 +176,13 @@ public class WebsiteVisitService {
         return VisitSystem.RESEARCH.code().equals(visit.getSystemCode())
             ? visit.isSubmittedResearch() || researchSubmissions.existsByVisitId(visit.getVisitId())
             : visit.isSubmittedResearch();
+    }
+
+    public Set<String> submittedResearchVisitIds(List<WebsiteVisitEntity> visits) {
+        List<String> visitIds = visits.stream().map(WebsiteVisitEntity::getVisitId).toList();
+        Set<String> submitted = new HashSet<>(researchSubmissions.findSubmittedVisitIds(visitIds));
+        visits.stream().filter(WebsiteVisitEntity::isSubmittedResearch).map(WebsiteVisitEntity::getVisitId).forEach(submitted::add);
+        return submitted;
     }
 
     @Transactional

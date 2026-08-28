@@ -69,7 +69,9 @@ describe("ResearchVisitsModule", () => {
     expect(wrapper.text()).toContain("已提交问卷");
     expect(wrapper.text()).toContain("提交转化率");
     expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("2 分 5 秒");
-    expect(wrapper.text()).toContain("iPhone · mobile");
+    expect(wrapper.text()).toContain("mobile · Safari");
+    expect(wrapper.text()).toContain("zh-CN");
+    expect(wrapper.text()).not.toContain("iPhone");
     expect(wrapper.text()).toContain("Safari");
     expect(wrapper.text()).toContain("TH · 203.0.113.7");
     expect(wrapper.text()).toContain("已提交");

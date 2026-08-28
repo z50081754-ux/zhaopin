@@ -36,7 +36,8 @@ public class AdminWebsiteVisitController {
         Page<WebsiteVisitEntity> result = service.list(
             VisitSystem.fromCode(systemCode), page, size, minDurationSeconds,
             maxDurationSeconds, today, submittedResearch, from, to);
-        return new ListResponse(result.getContent().stream().map(visit -> VisitItem.from(visit, service.isSubmittedResearch(visit))).toList(),
+        var submittedVisitIds = service.submittedResearchVisitIds(result.getContent());
+        return new ListResponse(result.getContent().stream().map(visit -> VisitItem.from(visit, submittedVisitIds.contains(visit.getVisitId()))).toList(),
             result.getTotalElements(), result.getTotalPages());
     }
 

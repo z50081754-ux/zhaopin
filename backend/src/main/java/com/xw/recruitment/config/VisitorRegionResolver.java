@@ -1,6 +1,7 @@
 package com.xw.recruitment.config;
 
 import jakarta.servlet.http.HttpServletRequest;
+import com.xw.recruitment.research.ResearchClientIpResolver;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -8,9 +9,14 @@ import java.util.Set;
 
 @Component
 public class VisitorRegionResolver {
+    private final ResearchClientIpResolver researchClientIpResolver;
     private static final Set<String> SOUTHEAST_ASIA = Set.of(
         "BN", "KH", "ID", "LA", "MY", "MM", "PH", "SG", "TH", "TL", "VN"
     );
+
+    public VisitorRegionResolver(ResearchClientIpResolver researchClientIpResolver) {
+        this.researchClientIpResolver = researchClientIpResolver;
+    }
 
     public String country(HttpServletRequest request) {
         String country = firstPresent(request.getHeader("CF-IPCountry"), request.getHeader("X-Country-Code"));
@@ -41,7 +47,7 @@ public class VisitorRegionResolver {
 
     public String researchIpAddress(HttpServletRequest request) {
         String remoteAddress = request.getRemoteAddr();
-        String address = isLocalAddress(remoteAddress)
+        String address = researchClientIpResolver.isTrustedProxy(request)
             ? firstPresent(request.getHeader("X-Real-IP"), remoteAddress)
             : remoteAddress;
         if (address == null) return "";
@@ -50,7 +56,7 @@ public class VisitorRegionResolver {
     }
 
     public String researchCountry(HttpServletRequest request) {
-        if (!isLocalAddress(request.getRemoteAddr())) return "UNKNOWN";
+        if (!researchClientIpResolver.isTrustedProxy(request)) return "UNKNOWN";
         String country = firstPresent(request.getHeader("X-Trusted-Country"));
         return country == null ? "UNKNOWN" : country.trim().toUpperCase(Locale.ROOT);
     }

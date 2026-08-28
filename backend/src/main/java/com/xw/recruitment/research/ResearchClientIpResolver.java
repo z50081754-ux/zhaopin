@@ -58,6 +58,11 @@ public class ResearchClientIpResolver {
         return current;
     }
 
+    public boolean isTrustedProxy(HttpServletRequest request) {
+        String directAddress = normalizeLiteral(request.getRemoteAddr());
+        return directAddress != null && trustedProxies.contains(directAddress);
+    }
+
     private String normalizeLiteral(String value) {
         if (value == null) return null;
         String candidate = value.trim();

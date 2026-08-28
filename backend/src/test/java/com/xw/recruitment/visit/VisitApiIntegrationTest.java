@@ -23,7 +23,8 @@ import java.time.ZoneId;
 
 @SpringBootTest(properties = {
     "spring.datasource.url=jdbc:h2:mem:visit-api;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
-    "xw.storage.directory=./target/test-resumes"
+    "xw.storage.directory=./target/test-resumes",
+    "xw.research.trusted-proxies=127.0.0.1"
 })
 @AutoConfigureMockMvc
 class VisitApiIntegrationTest {
@@ -214,6 +215,18 @@ class VisitApiIntegrationTest {
                 .param("systemCode", "research"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.visits[0].ip_address").value("198.51.100.77"))
+            .andExpect(jsonPath("$.visits[0].visitor_country").value("UNKNOWN"));
+    }
+
+    @Test
+    void unallowlistedPrivatePeerCannotForwardResearchIdentity() throws Exception {
+        mockMvc.perform(post("/api/visits/research")
+                .with(request -> { request.setRemoteAddr("10.1.2.3"); return request; })
+                .header("X-Real-IP", "203.0.113.13").header("X-Trusted-Country", "TH")
+                .contentType(MediaType.APPLICATION_JSON).content(researchVisitJson("visit-research-private-01", 5)))
+            .andExpect(status().isOk());
+        mockMvc.perform(get("/api/admin/visits").with(user("admin").roles("ADMIN")).param("systemCode", "research"))
+            .andExpect(jsonPath("$.visits[0].ip_address").value("10.1.2.3"))
             .andExpect(jsonPath("$.visits[0].visitor_country").value("UNKNOWN"));
     }
 
