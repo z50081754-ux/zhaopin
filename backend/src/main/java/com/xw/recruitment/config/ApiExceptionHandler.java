@@ -1,6 +1,7 @@
 package com.xw.recruitment.config;
 
 import com.xw.recruitment.research.ResearchApiException;
+import com.xw.recruitment.research.PublicResearchController;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,9 +23,13 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    Map<String, Object> validationFailed() {
-        return Map.of("ok", false, "code", "VALIDATION_FAILED",
-            "message", "Request validation failed");
+    Map<String, Object> validationFailed(MethodArgumentNotValidException exception) {
+        if (exception.getParameter().getContainingClass() == PublicResearchController.class) {
+            return Map.of("ok", false, "code", "VALIDATION_FAILED",
+                "message", "Request validation failed");
+        }
+        return Map.of("ok", false, "code", "INVALID_REQUEST",
+            "message", exception.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
