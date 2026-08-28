@@ -15,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -30,6 +31,7 @@ import java.time.ZoneId;
 class VisitApiIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired WebsiteVisitRepository visits;
+    @Autowired JdbcTemplate jdbc;
 
     @BeforeEach
     void clearVisits() {
@@ -284,6 +286,31 @@ class VisitApiIntegrationTest {
             .andExpect(jsonPath("$.maxDurationSeconds").value(50))
             .andExpect(jsonPath("$.submittedCount").value(2))
             .andExpect(jsonPath("$.conversionRate").value(66.67));
+    }
+
+    @Test
+    void adminResearchReportingRepairsDurableSubmissionRaceStateWithoutCrossSystemLeakage() throws Exception {
+        String researchId = "visit-research-durable-01";
+        qualifyResearch(researchId, 20);
+        persistSubmission(researchId);
+        String walletId = "visit-wallet-durable--01";
+        mockMvc.perform(post("/api/visits/walletcheck").contentType(MediaType.APPLICATION_JSON)
+                .content(walletVisitJson(walletId, 15, false))).andExpect(status().isOk());
+        persistSubmission(walletId);
+
+        mockMvc.perform(get("/api/admin/visits").with(user("admin").roles("ADMIN")).param("systemCode", "research").param("submittedResearch", "true"))
+            .andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.visits[0].submitted_research").value(true));
+        mockMvc.perform(get("/api/admin/visits").with(user("admin").roles("ADMIN")).param("systemCode", "research").param("submittedResearch", "false"))
+            .andExpect(jsonPath("$.total").value(0));
+        mockMvc.perform(get("/api/admin/visits/summary").with(user("admin").roles("ADMIN")).param("systemCode", "research"))
+            .andExpect(jsonPath("$.submittedCount").value(1)).andExpect(jsonPath("$.conversionRate").value(100.0));
+        mockMvc.perform(get("/api/admin/visits").with(user("admin").roles("ADMIN")).param("systemCode", "walletcheck").param("submittedResearch", "false"))
+            .andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.visits[0].submitted_research").value(false));
+    }
+
+    private void persistSubmission(String visitId) {
+        jdbc.update("insert into research_submissions (submission_number, source, rating, concern, feedback, wallet_network, wallet_ciphertext, wallet_nonce, wallet_hash, ip_hash, request_context_hash, terms_version, consented_at, created_at, visit_id) values (?, 'OPEN_CARD', 5, 'SECURITY', '', 'TRC20', 'cipher', 'nonce', ?, 'ip', 'context', '2026-08-01', current_timestamp, current_timestamp, ?)",
+            "SP-" + visitId, "hash-" + visitId, visitId);
     }
 
     private void qualifyResearch(String visitId, int durationSeconds) throws Exception {

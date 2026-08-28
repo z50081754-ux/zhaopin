@@ -129,7 +129,9 @@ describe("ResearchVisitsModule", () => {
     expect(row).toContain("2026/8/29 08:00:00");
     expect(row).toContain("2026/8/29 08:04:10");
     expect(row).toContain("/research");
-    expect(row).toContain("iPhone · mobile");
+    expect(row).toContain("mobile · Safari");
+    expect(row).toContain("zh-CN");
+    expect(row).not.toContain("iPhone");
     expect(row).toContain("Safari");
     expect(row).toContain("未知 · 203.0.113.7");
     expect(row).toContain("未提交");
