@@ -220,6 +220,52 @@ describe("AdminView subsystem shell", () => {
     expect(wrapper.find("[data-testid='current-account']").exists()).toBe(false);
   });
 
+  it("keeps a newer authenticated session when an unmounted research visit request later returns 401", async () => {
+    const oldSummary = deferred<ReturnType<typeof response>>();
+    const oldList = deferred<ReturnType<typeof response>>();
+    let sessionCalls = 0;
+    let researchSummaryCalls = 0;
+    let researchListCalls = 0;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) {
+        sessionCalls += 1;
+        return response({ account: sessionCalls === 1 ? "old-admin" : "new-admin" });
+      }
+      if (url.includes("/api/admin/logout")) return response({}, 204);
+      if (url.includes("/api/admin/login")) return response({ ok: true });
+      if (url.includes("/api/admin/visits/summary")) {
+        researchSummaryCalls += 1;
+        return researchSummaryCalls === 1 ? oldSummary.promise : response(emptyVisitSummary);
+      }
+      if (url.includes("/api/admin/visits")) {
+        researchListCalls += 1;
+        return researchListCalls === 1 ? oldList.promise : response(emptyVisits);
+      }
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/research/visits");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='current-account']").text()).toContain("old-admin");
+    await wrapper.get("[data-testid='logout']").trigger("click");
+    await flushPromises();
+    await wrapper.get("input[autocomplete='username']").setValue("new-admin");
+    await wrapper.get("input[autocomplete='current-password']").setValue("secret");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    expect(wrapper.get("[data-testid='current-account']").text()).toContain("new-admin");
+
+    oldSummary.resolve(response({}, 401));
+    oldList.resolve(response({}, 401));
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='current-account']").text()).toContain("new-admin");
+    expect(wrapper.text()).toContain("系统管理");
+    expect(wrapper.text()).not.toContain("安全登录");
+  });
+
   it("keeps research visit and submission history isolated from other admin APIs", async () => {
     const { fetch, wrapper } = mountAdmin("/admin/research/visits");
     await flushPromises();
