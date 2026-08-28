@@ -56,15 +56,37 @@ public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity
         """)
     int markResearchSubmitted(@Param("visitId") String visitId);
 
-    Page<WebsiteVisitEntity> findAllBySystemCodeAndDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
-        String systemCode,
-        int minDurationSeconds,
+    @Query("""
+        select visit from WebsiteVisitEntity visit
+         where visit.systemCode = :systemCode
+           and visit.durationSeconds between :minDurationSeconds and :maxDurationSeconds
+           and visit.qualifiedAt >= :qualifiedFrom and visit.qualifiedAt < :qualifiedTo
+           and (:submissionFilter = 'all'
+             or (:submissionFilter = 'true' and visit.submittedResearch = true)
+             or (:submissionFilter = 'false' and visit.submittedResearch = false))
+         order by visit.qualifiedAt desc
+        """)
+    Page<WebsiteVisitEntity> search(
+        @Param("systemCode") String systemCode,
+        @Param("minDurationSeconds") int minDurationSeconds,
+        @Param("maxDurationSeconds") int maxDurationSeconds,
+        @Param("qualifiedFrom") Instant qualifiedFrom,
+        @Param("qualifiedTo") Instant qualifiedTo,
+        @Param("submissionFilter") String submissionFilter,
         Pageable pageable
     );
-    Page<WebsiteVisitEntity> findAllBySystemCodeAndDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
-        String systemCode,
-        int minDurationSeconds,
-        Instant qualifiedFrom,
-        Pageable pageable
+
+    @Query("""
+        select count(visit), coalesce(avg(visit.durationSeconds), 0),
+               coalesce(max(visit.durationSeconds), 0),
+               coalesce(sum(case when visit.submittedResearch = true then 1L else 0L end), 0)
+          from WebsiteVisitEntity visit
+         where visit.systemCode = :systemCode
+           and visit.qualifiedAt >= :qualifiedFrom and visit.qualifiedAt < :qualifiedTo
+        """)
+    Object[] summarize(
+        @Param("systemCode") String systemCode,
+        @Param("qualifiedFrom") Instant qualifiedFrom,
+        @Param("qualifiedTo") Instant qualifiedTo
     );
 }

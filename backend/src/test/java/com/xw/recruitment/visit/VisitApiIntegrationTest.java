@@ -17,6 +17,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+
 @SpringBootTest(properties = {
     "spring.datasource.url=jdbc:h2:mem:visit-api;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
     "xw.storage.directory=./target/test-resumes"
@@ -183,6 +187,75 @@ class VisitApiIntegrationTest {
             .andExpect(jsonPath("$.visits[0].visitor_country").value("TH"))
             .andExpect(jsonPath("$.visits[0].entry_path").value("/"))
             .andExpect(jsonPath("$.visits[0].last_path").value("/"));
+    }
+
+    @Test
+    void filtersResearchVisitsAndSummarizesTheCurrentBangkokDay() throws Exception {
+        String fiveSecondVisitId = "visit-research-filter-0001";
+        String twentySecondVisitId = "visit-research-filter-0002";
+        String fiftySecondVisitId = "visit-research-filter-0003";
+        qualifyResearch(fiveSecondVisitId, 5);
+        qualifyResearch(twentySecondVisitId, 20);
+        qualifyResearch(fiftySecondVisitId, 50);
+        visits.markResearchSubmitted(twentySecondVisitId);
+        visits.markResearchSubmitted(fiftySecondVisitId);
+
+        ZoneId bangkok = ZoneId.of("Asia/Bangkok");
+        LocalDate today = LocalDate.now(bangkok);
+        Instant todayStart = today.atStartOfDay(bangkok).toInstant();
+        Instant tomorrowStart = today.plusDays(1).atStartOfDay(bangkok).toInstant();
+        setQualifiedAt(fiveSecondVisitId, todayStart);
+        qualifyResearch("visit-research-before-day", 7);
+        setQualifiedAt("visit-research-before-day", todayStart.minusSeconds(1));
+        qualifyResearch("visit-research-after-day-", 7);
+        setQualifiedAt("visit-research-after-day-", tomorrowStart);
+
+        mockMvc.perform(get("/api/admin/visits")
+                .with(user("admin").roles("ADMIN"))
+                .param("systemCode", "research")
+                .param("minDurationSeconds", "10")
+                .param("maxDurationSeconds", "30")
+                .param("submittedResearch", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.visits[0].duration_seconds").value(20));
+
+        mockMvc.perform(get("/api/admin/visits")
+                .with(user("admin").roles("ADMIN"))
+                .param("systemCode", "research")
+                .param("from", today.toString())
+                .param("to", today.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(3));
+
+        mockMvc.perform(get("/api/admin/visits")
+                .with(user("admin").roles("ADMIN"))
+                .param("systemCode", "walletcheck"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.total").value(0));
+
+        mockMvc.perform(get("/api/admin/visits/summary")
+                .with(user("admin").roles("ADMIN"))
+                .param("systemCode", "research"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.todayEffective").value(3))
+            .andExpect(jsonPath("$.averageDurationSeconds").value(25))
+            .andExpect(jsonPath("$.maxDurationSeconds").value(50))
+            .andExpect(jsonPath("$.submittedCount").value(2))
+            .andExpect(jsonPath("$.conversionRate").value(66.67));
+    }
+
+    private void qualifyResearch(String visitId, int durationSeconds) throws Exception {
+        mockMvc.perform(post("/api/visits/research")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(researchVisitJson(visitId, durationSeconds)))
+            .andExpect(status().isOk());
+    }
+
+    private void setQualifiedAt(String visitId, Instant qualifiedAt) {
+        WebsiteVisitEntity visit = visits.findByVisitId(visitId).orElseThrow();
+        visit.setQualifiedAt(qualifiedAt);
+        visits.saveAndFlush(visit);
     }
 
     private String researchVisitJson(String visitId, int durationSeconds) {

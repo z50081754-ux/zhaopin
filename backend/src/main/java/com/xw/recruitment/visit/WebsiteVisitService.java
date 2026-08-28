@@ -1,5 +1,6 @@
 package com.xw.recruitment.visit;
 
+import com.xw.recruitment.admin.AdminWebsiteVisitController.VisitSummary;
 import com.xw.recruitment.research.ResearchSubmissionRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -12,9 +13,13 @@ import java.time.ZoneId;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class WebsiteVisitService {
+    private static final ZoneId BANGKOK = ZoneId.of("Asia/Bangkok");
+    private static final Instant MAX_FILTER_INSTANT = Instant.parse("9999-12-31T23:59:59Z");
+
     private final WebsiteVisitRepository repository;
     private final ResearchSubmissionRepository researchSubmissions;
 
@@ -117,20 +122,52 @@ public class WebsiteVisitService {
     }
 
     public Page<WebsiteVisitEntity> list(VisitSystem system, int page, int size, int minDurationSeconds, boolean today) {
+        return list(system, page, size, minDurationSeconds, 86400, today, "all", null, null);
+    }
+
+    public Page<WebsiteVisitEntity> list(
+        VisitSystem system,
+        int page,
+        int size,
+        int minDurationSeconds,
+        int maxDurationSeconds,
+        boolean today,
+        String submittedResearch,
+        LocalDate from,
+        LocalDate to
+    ) {
         requireSystem(system);
-        int safeDuration = Math.min(Math.max(minDurationSeconds, 0), 86400);
+        int safeMinimum = boundedDuration(minDurationSeconds);
+        int safeMaximum = boundedDuration(maxDurationSeconds);
         PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100));
-        if (!today) {
-            return repository.findAllBySystemCodeAndDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
-                system.code(), safeDuration, pageable
-            );
+        String submissionFilter = normalizeSubmissionFilter(submittedResearch);
+        Instant qualifiedFrom = from == null ? Instant.EPOCH : from.atStartOfDay(BANGKOK).toInstant();
+        Instant qualifiedTo = to == null ? MAX_FILTER_INSTANT : to.plusDays(1).atStartOfDay(BANGKOK).toInstant();
+        if (today) {
+            LocalDate bangkokToday = LocalDate.now(BANGKOK);
+            qualifiedFrom = bangkokToday.atStartOfDay(BANGKOK).toInstant();
+            qualifiedTo = bangkokToday.plusDays(1).atStartOfDay(BANGKOK).toInstant();
         }
-        Instant bangkokTodayStart = LocalDate.now(ZoneId.of("Asia/Bangkok"))
-            .atStartOfDay(ZoneId.of("Asia/Bangkok"))
-            .toInstant();
-        return repository.findAllBySystemCodeAndDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
-            system.code(), safeDuration, bangkokTodayStart, pageable
+        return repository.search(
+            system.code(), safeMinimum, safeMaximum, qualifiedFrom, qualifiedTo, submissionFilter, pageable
         );
+    }
+
+    public VisitSummary summary(VisitSystem system, LocalDate bangkokDay) {
+        requireSystem(system);
+        if (bangkokDay == null) throw new IllegalArgumentException("Invalid summary date.");
+        Instant qualifiedFrom = bangkokDay.atStartOfDay(BANGKOK).toInstant();
+        Instant qualifiedTo = bangkokDay.plusDays(1).atStartOfDay(BANGKOK).toInstant();
+        Object[] aggregateRows = repository.summarize(system.code(), qualifiedFrom, qualifiedTo);
+        Object[] aggregate = (Object[]) aggregateRows[0];
+        long total = ((Number) aggregate[0]).longValue();
+        double average = ((Number) aggregate[1]).doubleValue();
+        int maximum = ((Number) aggregate[2]).intValue();
+        long submitted = ((Number) aggregate[3]).longValue();
+        double conversionRate = total == 0
+            ? 0
+            : Math.round((submitted * 100.0 / total) * 100.0) / 100.0;
+        return new VisitSummary(total, average, maximum, submitted, conversionRate);
     }
 
     @Transactional
@@ -153,6 +190,14 @@ public class WebsiteVisitService {
 
     private void requireSystem(VisitSystem system) {
         if (system == null) throw new IllegalArgumentException("Invalid visit system.");
+    }
+
+    private String normalizeSubmissionFilter(String value) {
+        String normalized = value == null ? "all" : value.trim().toLowerCase(Locale.ROOT);
+        if (!List.of("all", "true", "false").contains(normalized)) {
+            throw new IllegalArgumentException("Invalid research submission filter.");
+        }
+        return normalized;
     }
 
     private int boundedDuration(int value) { return Math.min(Math.max(value, 0), 86400); }

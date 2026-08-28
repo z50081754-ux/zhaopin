@@ -63,6 +63,42 @@ class WebsiteVisitConcurrencyTest {
         assertTrue(stored.isQueriedAddress());
     }
 
+    @Test
+    void concurrentHeartbeatAndServerSubmissionCannotRegressResearchState() throws Exception {
+        String visitId = "visit-research-race-0001";
+        service.qualify(VisitSystem.RESEARCH, researchVisit(visitId), "127.0.0.1");
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<?> highAndSubmitted = executor.submit(() -> {
+                ready.countDown();
+                await(start);
+                repository.mergeVisitState(
+                    VisitSystem.RESEARCH.code(), visitId, 40, "/", Instant.now(), false);
+                repository.markResearchSubmitted(visitId);
+            });
+            Future<?> low = executor.submit(() -> {
+                ready.countDown();
+                await(start);
+                repository.mergeVisitState(
+                    VisitSystem.RESEARCH.code(), visitId, 10, "/", Instant.now(), false);
+            });
+
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            highAndSubmitted.get(10, TimeUnit.SECONDS);
+            low.get(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        WebsiteVisitEntity stored = repository.findByVisitId(visitId).orElseThrow();
+        assertEquals(40, stored.getDurationSeconds());
+        assertTrue(stored.isSubmittedResearch());
+    }
+
     private void await(CountDownLatch latch) {
         try {
             if (!latch.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Timed out waiting for concurrent start.");
@@ -76,6 +112,13 @@ class WebsiteVisitConcurrencyTest {
         return new WebsiteVisitService.VisitRequest(
             visitId, 15, "/", "/", "desktop", "Test PC", "Test OS", "Test Browser",
             "1920x1080", "zh-CN", "Asia/Bangkok", "test-agent", List.of(), false
+        );
+    }
+
+    private WebsiteVisitService.VisitRequest researchVisit(String visitId) {
+        return new WebsiteVisitService.VisitRequest(
+            visitId, 5, "/", "/", "mobile", "Test phone", "Test OS", "Test Browser",
+            "390x844", "en-US", "Asia/Bangkok", "test-agent", List.of(), false
         );
     }
 }
