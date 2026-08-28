@@ -95,6 +95,53 @@ class RecruitmentApplicationTests {
     }
 
     @Test
+    void rejectsQualificationForDifferentSubsystemWithoutMutatingVisit() {
+        String visitId = "visit-recruitment-0003";
+        websiteVisitService.qualify(VisitSystem.RECRUITMENT,
+            visit(visitId, 15, false, "/jobs", "/jobs/123"), "127.0.0.1");
+
+        assertThrows(IllegalArgumentException.class, () -> websiteVisitService.qualify(
+            VisitSystem.WALLETCHECK,
+            visit(visitId, 30, true, "/wallet/0x123", "/wallet/0x123"),
+            "127.0.0.2"
+        ));
+
+        var stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
+        assertEquals("recruitment", stored.getSystemCode());
+        assertEquals(15, stored.getDurationSeconds());
+        assertEquals("/jobs/123", stored.getLastPath());
+        assertFalse(stored.isQueriedAddress());
+    }
+
+    @Test
+    void storesWalletPathsAsAddressTemplates() {
+        String visitId = "visit-walletcheck-0002";
+        String address = "0x1234567890abcdef";
+        websiteVisitService.qualify(VisitSystem.WALLETCHECK,
+            visit(visitId, 15, false, "/wallet/" + address + "?tab=overview", "/wallet/" + address + "/activity"),
+            "127.0.0.1");
+        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, visitId,
+            new WebsiteVisitService.HeartbeatRequest(16, "/wallet/" + address + "?tab=history", false));
+
+        var stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
+        assertEquals("/wallet/:address", stored.getEntryPath());
+        assertEquals("/wallet/:address", stored.getLastPath());
+    }
+
+    @Test
+    void preservesNonWalletPaths() {
+        String visitId = "visit-walletcheck-0003";
+        websiteVisitService.qualify(VisitSystem.WALLETCHECK,
+            visit(visitId, 15, false, "/jobs?location=bangkok", "/about/team"), "127.0.0.1");
+        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, visitId,
+            new WebsiteVisitService.HeartbeatRequest(16, "/jobs/123?tab=description", false));
+
+        var stored = websiteVisitRepository.findByVisitId(visitId).orElseThrow();
+        assertEquals("/jobs?location=bangkok", stored.getEntryPath());
+        assertEquals("/jobs/123?tab=description", stored.getLastPath());
+    }
+
+    @Test
     void filtersVisitsToCurrentBangkokDay() {
         websiteVisitService.qualify(visit("visit-000000000007", 15), "127.0.0.1");
         websiteVisitService.qualify(visit("visit-000000000008", 15), "127.0.0.1");
@@ -152,8 +199,18 @@ class RecruitmentApplicationTests {
     }
 
     private WebsiteVisitService.VisitRequest visit(String id, int durationSeconds, boolean queriedAddress) {
+        return visit(id, durationSeconds, queriedAddress, "/", "/jobs");
+    }
+
+    private WebsiteVisitService.VisitRequest visit(
+        String id,
+        int durationSeconds,
+        boolean queriedAddress,
+        String entryPath,
+        String lastPath
+    ) {
         return new WebsiteVisitService.VisitRequest(
-            id, durationSeconds, "/", "/jobs", "desktop", "Test PC", "Test OS",
+            id, durationSeconds, entryPath, lastPath, "desktop", "Test PC", "Test OS",
             "Test Browser", "1920x1080", "zh-CN", "Asia/Shanghai", "test-agent", List.of(), queriedAddress
         );
     }

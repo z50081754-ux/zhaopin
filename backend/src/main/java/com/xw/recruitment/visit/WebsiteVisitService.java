@@ -31,6 +31,9 @@ public class WebsiteVisitService {
         if (duration < 15) throw new IllegalArgumentException("Visit must be at least 15 seconds.");
         Instant now = Instant.now();
         WebsiteVisitEntity visit = repository.findByVisitId(request.visitId()).orElse(null);
+        if (visit != null && !system.code().equals(visit.getSystemCode())) {
+            throw new IllegalArgumentException("Visit system does not match.");
+        }
         if (visit == null) {
             visit = new WebsiteVisitEntity();
         }
@@ -40,7 +43,7 @@ public class WebsiteVisitService {
             visit.setStartedAt(now.minusSeconds(duration));
             visit.setQualifiedAt(now);
             visit.setIpAddress(clean(ipAddress, 64));
-            visit.setEntryPath(clean(request.entryPath(), 500));
+            visit.setEntryPath(normalizePath(request.entryPath()));
             visit.setDeviceType(clean(request.deviceType(), 80));
             visit.setDeviceModel(clean(request.deviceModel(), 200));
             visit.setOperatingSystem(clean(request.operatingSystem(), 200));
@@ -52,7 +55,7 @@ public class WebsiteVisitService {
             visit.setDetectedWallets(cleanWallets(request.detectedWallets()));
         }
         visit.setDurationSeconds(Math.max(visit.getDurationSeconds(), duration));
-        visit.setLastPath(clean(request.lastPath(), 500));
+        visit.setLastPath(normalizePath(request.lastPath()));
         visit.setLastSeenAt(now);
         visit.setQueriedAddress(visit.isQueriedAddress() || request.queriedAddress());
         repository.save(visit);
@@ -72,7 +75,7 @@ public class WebsiteVisitService {
             .orElseThrow(() -> new IllegalArgumentException("Visit not found."));
         if (!system.code().equals(visit.getSystemCode())) throw new IllegalArgumentException("Visit system does not match.");
         visit.setDurationSeconds(Math.max(visit.getDurationSeconds(), boundedDuration(request.durationSeconds())));
-        visit.setLastPath(clean(request.lastPath(), 500));
+        visit.setLastPath(normalizePath(request.lastPath()));
         visit.setLastSeenAt(Instant.now());
         visit.setQueriedAddress(visit.isQueriedAddress() || request.queriedAddress());
         return repository.save(visit);
@@ -137,6 +140,17 @@ public class WebsiteVisitService {
         if (value == null) return "";
         String clean = value.trim();
         return clean.length() > max ? clean.substring(0, max) : clean;
+    }
+
+    private String normalizePath(String value) {
+        String path = clean(value, 500);
+        if (path.startsWith("/wallet/")) {
+            String segment = path.substring("/wallet/".length());
+            if (!segment.isEmpty() && segment.charAt(0) != '/' && segment.charAt(0) != '?' && segment.charAt(0) != '#') {
+                return "/wallet/:address";
+            }
+        }
+        return path;
     }
 
     public record VisitRequest(
