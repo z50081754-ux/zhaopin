@@ -51,7 +51,6 @@ const selectedApplicationIds=ref<number[]>([]);
 const currentPage=ref(0), totalPages=ref(0), totalApplications=ref(0), pageSize=20;
 const visits=ref<WebsiteVisit[]>([]), visitPage=ref(0), totalVisitPages=ref(0), totalVisits=ref(0), visitPageSize=20;
 const visitsSystem=ref<"recruitment"|"walletcheck"|null>(null);
-let visitRequestSequence=0;
 const selectedVisitIds=ref<number[]>([]);
 const visitMinDuration=ref<number|"">("");
 const visitTodayOnly=ref(false);
@@ -59,6 +58,10 @@ const jobs=ref<AdminJob[]>([]), jobEditorOpen=ref(false), editingJobId=ref<numbe
 const jobStatusFilter=ref<"all"|"online"|"offline">("all");
 const activeTemplate=ref<SiteTemplate>("technology"), templateSaving=ref(false), templateMessage=ref("");
 const defaultLanguage=ref<DefaultLanguage>("auto");
+type RequestOwner={requestId:number;sessionGeneration:number};
+type ViewRequestOwner=RequestOwner&{viewGeneration:number};
+let sessionGeneration=0, viewGeneration=0, requestSequence=0;
+let activeSessionRequestId=0, activeViewRequestId=0, loadingRequestId=0;
 const emptyJob=()=>({title:"",category:"职能岗位",requiredLocation:"泰国",workMode:"居家",salaryRange:"",responsibilities:"",requirements:"",bonus:"",status:"draft",recruitmentCount:1});
 const jobForm=reactive(emptyJob());
 const stageLabels:Record<string,string>={new:"新投递",screening:"筛选中",interview:"面试中",offer:"Offer",hired:"已录用",rejected:"不合适"};
@@ -90,23 +93,63 @@ const rmbPreview=computed(()=>{
   return `¥${format(amount(match[1],match[2]))}–¥${format(amount(match[3],match[4]))}/月`;
 });
 
+function beginLoading(requestId:number){loadingRequestId=requestId;loading.value=true;error.value=""}
+function finishLoading(owner:RequestOwner){if(loadingRequestId===owner.requestId){loadingRequestId=0;loading.value=false}}
+function beginSessionRequest():RequestOwner{
+  const owner={requestId:++requestSequence,sessionGeneration};
+  activeSessionRequestId=owner.requestId;beginLoading(owner.requestId);return owner;
+}
+function ownsSessionRequest(owner:RequestOwner){return owner.sessionGeneration===sessionGeneration&&owner.requestId===activeSessionRequestId}
+function beginViewRequest():ViewRequestOwner{
+  const owner={requestId:++requestSequence,sessionGeneration,viewGeneration};
+  activeViewRequestId=owner.requestId;beginLoading(owner.requestId);return owner;
+}
+function ownsViewRequest(owner:ViewRequestOwner){
+  return owner.sessionGeneration===sessionGeneration&&owner.viewGeneration===viewGeneration&&owner.requestId===activeViewRequestId;
+}
+function invalidateViewRequests(){
+  const invalidatedRequestId=activeViewRequestId;
+  activeViewRequestId=0;viewGeneration++;error.value="";templateMessage.value="";templateSaving.value=false;
+  if(loadingRequestId===invalidatedRequestId){loadingRequestId=0;loading.value=false}
+}
+function clearVisitData(){
+  visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
+}
+function clearProtectedData(){
+  applications.value=[];selectedApplication.value=null;selectedApplicationIds.value=[];currentPage.value=0;totalPages.value=0;totalApplications.value=0;
+  jobs.value=[];jobEditorOpen.value=false;editingJobId.value=null;jobStatusFilter.value="all";Object.assign(jobForm,emptyJob());
+  clearVisitData();visitPage.value=0;activeTemplate.value="technology";defaultLanguage.value="auto";templateMessage.value="";templateSaving.value=false;
+}
+function clearAuthenticatedSession(expectedGeneration:number){
+  if(expectedGeneration!==sessionGeneration)return false;
+  sessionGeneration++;activeSessionRequestId=0;invalidateViewRequests();clearProtectedData();
+  authenticated.value=false;account.value="";password.value="";loadingRequestId=0;loading.value=false;error.value="";
+  return true;
+}
+function handleViewError(owner:ViewRequestOwner,cause:unknown,message:string){
+  if(!ownsViewRequest(owner))return;
+  if((cause as Error).message==="UNAUTHORIZED"){clearAuthenticatedSession(owner.sessionGeneration);return}
+  error.value=message;
+}
+
 async function api<T>(url:string,options:RequestInit={}):Promise<T>{
   const response=await fetch(apiUrl(url),{credentials:"include",...options});
-  if(response.status===401){authenticated.value=false;throw new Error("UNAUTHORIZED")}
+  if(response.status===401)throw new Error("UNAUTHORIZED");
   const result=await response.json();
   if(!response.ok) throw new Error(result?.message||result?.code||"REQUEST_FAILED");
   return result as T;
 }
 async function loadApplications(){
-  loading.value=true; error.value="";selectedApplicationIds.value=[];
+  const owner=beginViewRequest();selectedApplicationIds.value=[];
   try{
     const params=new URLSearchParams({q:query.value,stage:stage.value,referrer:referrerQuery.value,
       createdFrom:createdFrom.value,createdTo:createdTo.value,operatingSystem:operatingSystemQuery.value,
       deviceModel:deviceModelQuery.value,page:String(currentPage.value),size:String(pageSize)});
     const result=await api<{ok:boolean;applications:Application[];total:number;pages:number}>(`/api/admin/applications?${params}`);
-    applications.value=result.applications||[];totalApplications.value=result.total||0;totalPages.value=result.pages||0;authenticated.value=true;
-  }catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="数据加载失败，请稍后重试。"}
-  finally{loading.value=false}
+    if(!ownsViewRequest(owner))return;
+    applications.value=result.applications||[];totalApplications.value=result.total||0;totalPages.value=result.pages||0;
+  }catch(e){handleViewError(owner,e,"数据加载失败，请稍后重试。")}
+  finally{finishLoading(owner)}
 }
 function searchApplications(){currentPage.value=0;void loadApplications()}
 function goToPage(page:number){
@@ -114,40 +157,40 @@ function goToPage(page:number){
   currentPage.value=page;void loadApplications();window.scrollTo({top:0,behavior:"smooth"});
 }
 async function loadJobs(){
-  loading.value=true; error.value="";
-  try{jobs.value=await api<AdminJob[]>("/api/admin/jobs");authenticated.value=true}
-  catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="岗位数据加载失败。"}
-  finally{loading.value=false}
+  const owner=beginViewRequest();
+  try{const result=await api<AdminJob[]>("/api/admin/jobs");if(ownsViewRequest(owner))jobs.value=result}
+  catch(e){handleViewError(owner,e,"岗位数据加载失败。")}
+  finally{finishLoading(owner)}
 }
 async function loadVisits(system:AdminSystem=activeSystem.value){
   const requestedSystem=system==="walletcheck"?"walletcheck":"recruitment";
-  const requestId=++visitRequestSequence;
+  const owner=beginViewRequest();
   if(visitsSystem.value!==requestedSystem){
     visits.value=[];totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
     visitsSystem.value=requestedSystem;
   }
-  loading.value=true;error.value="";selectedVisitIds.value=[];
+  selectedVisitIds.value=[];
   try{
     const minDurationSeconds=Math.max(0,Math.floor(Number(visitMinDuration.value)||0));
     const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds),today:String(visitTodayOnly.value)});
     params.set("systemCode",requestedSystem);
     const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?${params}`);
-    const currentSystem=activeSystem.value==="walletcheck"?"walletcheck":activeSystem.value==="recruitment"&&activeModule.value==="visits"?"recruitment":null;
-    if(requestId!==visitRequestSequence||currentSystem!==requestedSystem)return;
-    visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;authenticated.value=true;
-  }catch(e){if(requestId===visitRequestSequence&&(e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
-  finally{if(requestId===visitRequestSequence)loading.value=false}
+    if(!ownsViewRequest(owner))return;
+    visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;
+  }catch(e){handleViewError(owner,e,"有效浏览数据加载失败。")}
+  finally{finishLoading(owner)}
 }
 function searchVisits(){visitPage.value=0;void loadVisits()}
 function toggleTodayVisits(){visitTodayOnly.value=!visitTodayOnly.value;searchVisits()}
 async function deleteVisit(visit:WebsiteVisit){
   if(!window.confirm(`确定删除这条有效浏览记录吗？\nIP：${display(visit.ip_address)}\n有效停留：${visitDuration(visit.duration_seconds)}\n删除后无法恢复。`))return;
-  loading.value=true;error.value="";
+  const owner=beginViewRequest();
   try{
     await api(`/api/admin/visits/${visit.id}`,{method:"DELETE"});
+    if(!ownsViewRequest(owner))return;
     if(visits.value.length===1&&visitPage.value>0)visitPage.value--;
     await loadVisits();
-  }catch(e){error.value=`有效浏览记录删除失败：${(e as Error).message}`}finally{loading.value=false}
+  }catch(e){handleViewError(owner,e,`有效浏览记录删除失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 function toggleAllVisits(){
   const pageIds=visits.value.map(item=>item.id);
@@ -158,21 +201,27 @@ function toggleAllVisits(){
 async function deleteSelectedVisits(){
   const ids=[...selectedVisitIds.value];
   if(!ids.length||!window.confirm(`确定批量删除选中的 ${ids.length} 条有效浏览记录吗？删除后无法恢复。`))return;
-  loading.value=true;error.value="";
+  const owner=beginViewRequest();
   try{
     await api("/api/admin/visits/batch",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})});
+    if(!ownsViewRequest(owner))return;
     selectedVisitIds.value=[];
     if(visits.value.every(visit=>ids.includes(visit.id))&&visitPage.value>0)visitPage.value--;
     await loadVisits();
-  }catch(e){error.value=`有效浏览记录批量删除失败：${(e as Error).message}`}finally{loading.value=false}
+  }catch(e){handleViewError(owner,e,`有效浏览记录批量删除失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 function goToVisitPage(page:number){
   if(page<0||page>=totalVisitPages.value||page===visitPage.value)return;
   visitPage.value=page;void loadVisits();window.scrollTo({top:0,behavior:"smooth"});
 }
 async function loadTemplate(){
-  try{const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings");activeTemplate.value=result.activeTemplate;defaultLanguage.value=result.defaultLanguage||"auto";authenticated.value=true}
-  catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="官网模板读取失败。"}
+  const owner=beginViewRequest();
+  try{
+    const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings");
+    if(!ownsViewRequest(owner))return;
+    activeTemplate.value=result.activeTemplate;defaultLanguage.value=result.defaultLanguage||"auto";
+  }catch(e){handleViewError(owner,e,"官网模板读取失败。")}
+  finally{finishLoading(owner)}
 }
 function loadVisibleSystem(system:AdminSystem){
   if(system==="walletcheck")return loadVisits(system);
@@ -184,35 +233,58 @@ function loadVisibleSystem(system:AdminSystem){
   }
   return Promise.resolve();
 }
+async function restoreSession(){
+  const owner=beginSessionRequest();
+  try{
+    const session=await api<{account:string}>("/api/admin/session");
+    if(!ownsSessionRequest(owner))return;
+    activeSessionRequestId=0;account.value=session.account;authenticated.value=true;
+    void loadVisibleSystem(activeSystem.value);
+  }catch(cause){
+    if(!ownsSessionRequest(owner))return;
+    if((cause as Error).message==="UNAUTHORIZED")clearAuthenticatedSession(owner.sessionGeneration);
+    else{authenticated.value=false;account.value="";error.value="无法验证登录状态，请稍后重试。"}
+  }finally{finishLoading(owner)}
+}
 async function login(){
-  loading.value=true;error.value="";
+  const owner=beginSessionRequest();
   try{
     await api("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({account:account.value,password:password.value})});
-    password.value="";authenticated.value=true;
-    if(activeSystem.value==="walletcheck")await loadVisibleSystem(activeSystem.value);
-    else if(activeSystem.value==="recruitment")await Promise.all([loadApplications(),loadJobs(),loadTemplate()]);
-  }catch{error.value="账号或密码错误，或后端服务尚未启动。"}finally{loading.value=false}
+    const session=await api<{account:string}>("/api/admin/session");
+    if(!ownsSessionRequest(owner))return;
+    sessionGeneration++;activeSessionRequestId=0;invalidateViewRequests();
+    account.value=session.account;password.value="";authenticated.value=true;
+    void loadVisibleSystem(activeSystem.value);
+  }catch{if(ownsSessionRequest(owner))error.value="账号或密码错误，或后端服务尚未启动。"}
+  finally{finishLoading(owner)}
 }
 async function logout(){
-  loading.value=true;error.value="";
+  const owner=beginSessionRequest();
   try{
     const response=await fetch(apiUrl("/api/admin/logout"),{method:"POST",credentials:"include"});
     if(!response.ok&&response.status!==401)throw new Error("REQUEST_FAILED");
-  }catch{error.value="退出登录失败，请稍后重试。";loading.value=false;return}
-  authenticated.value=false;account.value="";password.value="";applications.value=[];jobs.value=[];
-  visitRequestSequence++;visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;
-  activeSystem.value="home";window.history.pushState({},"",pathForAdminSystem("home"));loading.value=false;
+    if(!ownsSessionRequest(owner))return;
+  }catch{if(ownsSessionRequest(owner))error.value="退出登录失败，请稍后重试。";finishLoading(owner);return}
+  if(clearAuthenticatedSession(owner.sessionGeneration)){
+    activeSystem.value="home";window.history.pushState({},"",pathForAdminSystem("home"));
+  }
 }
 async function openApplication(item:Application){
-  try{selectedApplication.value=await api<ApplicationDetail>(`/api/admin/applications/${item.id}`)}
-  catch{error.value="无法读取候选人详情。"}
+  const owner=beginViewRequest();
+  try{const result=await api<ApplicationDetail>(`/api/admin/applications/${item.id}`);if(ownsViewRequest(owner))selectedApplication.value=result}
+  catch(e){handleViewError(owner,e,"无法读取候选人详情。")}
+  finally{finishLoading(owner)}
 }
 async function changeStage(value:string){
   if(!selectedApplication.value)return;
+  const owner=beginViewRequest();
+  const applicationId=selectedApplication.value.summary.id;
   try{
-    await api(`/api/admin/applications/${selectedApplication.value.summary.id}/stage`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({stage:value})});
+    await api(`/api/admin/applications/${applicationId}/stage`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({stage:value})});
+    if(!ownsViewRequest(owner))return;
     selectedApplication.value.summary.stage=value;await loadApplications();
-  }catch{error.value="阶段更新失败。"}
+  }catch(e){handleViewError(owner,e,"阶段更新失败。")}
+  finally{finishLoading(owner)}
 }
 function newJob(){error.value="";editingJobId.value=null;Object.assign(jobForm,emptyJob());jobEditorOpen.value=true}
 function editJob(job:AdminJob){
@@ -223,46 +295,49 @@ function editJob(job:AdminJob){
 }
 const lines=(value:string)=>value.split("\n").map(item=>item.trim()).filter(Boolean);
 async function saveJob(){
-  error.value="";
   const responsibilities=lines(jobForm.responsibilities), requirements=lines(jobForm.requirements);
   if(!jobForm.title.trim()||!jobForm.requiredLocation.trim()){
     error.value="请填写岗位名称和要求工作地后再保存。";
     return;
   }
-  loading.value=true;
+  const owner=beginViewRequest();
   const payload={...jobForm,responsibilities,requirements,bonus:lines(jobForm.bonus)};
   try{
     await api(editingJobId.value?`/api/admin/jobs/${editingJobId.value}`:"/api/admin/jobs",{method:editingJobId.value?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if(!ownsViewRequest(owner))return;
     jobEditorOpen.value=false;await loadJobs();
-  }catch(e){error.value=`岗位保存失败：${(e as Error).message}`}finally{loading.value=false}
+  }catch(e){handleViewError(owner,e,`岗位保存失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 async function deleteJob(){
   if(!editingJobId.value)return;
   if(!window.confirm(`确定删除岗位“${jobForm.title}”吗？删除后前台将不再显示，且无法恢复。`))return;
-  loading.value=true;error.value="";
+  const owner=beginViewRequest();
   try{
     await api(`/api/admin/jobs/${editingJobId.value}`,{method:"DELETE"});
+    if(!ownsViewRequest(owner))return;
     jobEditorOpen.value=false;editingJobId.value=null;await loadJobs();
-  }catch(e){error.value=`岗位删除失败：${(e as Error).message}`}finally{loading.value=false}
+  }catch(e){handleViewError(owner,e,`岗位删除失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 async function toggleJobStatus(job:AdminJob){
-  loading.value=true;error.value="";
+  const owner=beginViewRequest();
   const status=job.status==="open"?"paused":"open";
   const currentFilter=jobStatusFilter.value;
   const payload={...job,status,salaryRange:salaryInput(job.salaryRange),internationalSalaryRange:undefined};
   try{
     await api(`/api/admin/jobs/${job.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if(!ownsViewRequest(owner))return;
     activeModule.value="jobs";
     jobStatusFilter.value=currentFilter;
     await loadJobs();
   }
-  catch(e){error.value=`岗位${status==="open"?"上线":"下线"}失败：${(e as Error).message}`}finally{loading.value=false}
+  catch(e){handleViewError(owner,e,`岗位${status==="open"?"上线":"下线"}失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 async function deleteApplication(item:Application){
   if(!window.confirm(`确定删除候选人“${display(item.resume_name)}”的投递记录吗？简历文件也会一并删除，且无法恢复。`))return;
-  loading.value=true;error.value="";
+  const owner=beginViewRequest();
   try{
     await api(`/api/admin/applications/${item.id}`,{method:"DELETE"});
+    if(!ownsViewRequest(owner))return;
     applications.value=applications.value.filter(application=>application.id!==item.id);
     totalApplications.value=Math.max(0,totalApplications.value-1);
     totalPages.value=Math.ceil(totalApplications.value/pageSize);
@@ -270,7 +345,7 @@ async function deleteApplication(item:Application){
     if(!applications.value.length&&currentPage.value>0)currentPage.value--;
     await loadApplications();
   }
-  catch(e){error.value=`候选人删除失败：${(e as Error).message}`}finally{loading.value=false}
+  catch(e){handleViewError(owner,e,`候选人删除失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 function toggleAllApplications(){
   const pageIds=applications.value.map(item=>item.id);
@@ -281,38 +356,42 @@ function toggleAllApplications(){
 async function deleteSelectedApplications(){
   const ids=[...selectedApplicationIds.value];
   if(!ids.length||!window.confirm(`确定批量删除选中的 ${ids.length} 条候选人记录吗？简历文件也会一并删除，且无法恢复。`))return;
-  loading.value=true;error.value="";
+  const owner=beginViewRequest();
   try{
     await api("/api/admin/applications/batch",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})});
+    if(!ownsViewRequest(owner))return;
     if(selectedApplication.value&&ids.includes(selectedApplication.value.summary.id))selectedApplication.value=null;
     selectedApplicationIds.value=[];
     if(applications.value.every(item=>ids.includes(item.id))&&currentPage.value>0)currentPage.value--;
     await loadApplications();
-  }catch(e){error.value=`候选人批量删除失败：${(e as Error).message}`}finally{loading.value=false}
+  }catch(e){handleViewError(owner,e,`候选人批量删除失败：${(e as Error).message}`)}finally{finishLoading(owner)}
 }
 async function selectTemplate(template:SiteTemplate){
   if(template===activeTemplate.value)return;
-  templateSaving.value=true;templateMessage.value="";error.value="";
+  const owner=beginViewRequest();templateSaving.value=true;templateMessage.value="";
   try{
     const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({activeTemplate:template,defaultLanguage:defaultLanguage.value})});
+    if(!ownsViewRequest(owner))return;
     activeTemplate.value=result.activeTemplate;templateMessage.value="模板已启用，刷新招聘官网即可看到新风格。";
-  }catch(e){error.value=`模板切换失败：${(e as Error).message}`}finally{templateSaving.value=false}
+  }catch(e){handleViewError(owner,e,`模板切换失败：${(e as Error).message}`)}finally{if(ownsViewRequest(owner))templateSaving.value=false;finishLoading(owner)}
 }
 async function selectDefaultLanguage(value:DefaultLanguage){
   if(value===defaultLanguage.value)return;
-  templateSaving.value=true;templateMessage.value="";error.value="";
+  const owner=beginViewRequest();templateSaving.value=true;templateMessage.value="";
   try{
     const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({activeTemplate:activeTemplate.value,defaultLanguage:value})});
+    if(!ownsViewRequest(owner))return;
     defaultLanguage.value=result.defaultLanguage;templateMessage.value="默认语言已保存，仅影响尚未手动选择过语言的访客。";
-  }catch(e){error.value=`默认语言保存失败：${(e as Error).message}`}finally{templateSaving.value=false}
+  }catch(e){handleViewError(owner,e,`默认语言保存失败：${(e as Error).message}`)}finally{if(ownsViewRequest(owner))templateSaving.value=false;finishLoading(owner)}
 }
 function switchModule(module:"applications"|"visits"|"jobs"|"templates"|"research"){
+  if(activeModule.value!==module)invalidateViewRequests();
   activeModule.value=module;
   if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else if(module==="applications")void loadApplications();
 }
 function navigateSystem(system:AdminSystem){
   if(activeSystem.value!==system){
-    visitRequestSequence++;visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
+    invalidateViewRequests();clearVisitData();
   }
   activeSystem.value=system;
   window.history.pushState({},"",pathForAdminSystem(system));
@@ -321,14 +400,13 @@ function navigateSystem(system:AdminSystem){
 function syncSystemFromPath(){
   const system=parseAdminPath(window.location.pathname);
   if(activeSystem.value!==system){
-    visitRequestSequence++;visits.value=[];visitsSystem.value=null;totalVisits.value=0;totalVisitPages.value=0;selectedVisitIds.value=[];
+    invalidateViewRequests();clearVisitData();
   }
   activeSystem.value=system;
-  void loadVisibleSystem(activeSystem.value);
+  if(authenticated.value)void loadVisibleSystem(activeSystem.value);
 }
 onMounted(()=>{
-  if(activeSystem.value==="home")void loadApplications();
-  else void loadVisibleSystem(activeSystem.value);
+  void restoreSession();
   window.addEventListener("popstate",syncSystemFromPath);
 });
 onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));

@@ -39,6 +39,12 @@ public class AdminAuthController {
         return new LoginResponse(true);
     }
 
+    @GetMapping("/session")
+    public SessionResponse session(Authentication authentication) {
+        return new SessionResponse(authentication.getName());
+    }
+
     public record LoginRequest(String account, String password) {}
     public record LoginResponse(boolean ok) {}
+    public record SessionResponse(String account) {}
 }

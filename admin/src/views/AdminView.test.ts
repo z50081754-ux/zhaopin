@@ -46,8 +46,13 @@ function visitResponse(id: number, entryPath: string, systemCode: "recruitment" 
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(done => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, reject, resolve };
+}
+
+function setupValue<T>(wrapper: VueWrapper, name: string): T {
+  return (wrapper.vm as unknown as { $: { setupState: Record<string, T> } }).$.setupState[name];
 }
 
 function mountAdmin(pathname: string, visitBody: object = emptyVisits) {
@@ -55,7 +60,9 @@ function mountAdmin(pathname: string, visitBody: object = emptyVisits) {
   const fetch = vi.fn(async (url: string) => ({
     ok: true,
     status: 200,
-    json: async () => url.includes("/api/admin/visits") ? visitBody : emptyApplications
+    json: async () => url.includes("/api/admin/session")
+      ? { account: "admin" }
+      : url.includes("/api/admin/visits") ? visitBody : emptyApplications
   }));
   vi.stubGlobal("fetch", fetch);
   return { fetch, wrapper: trackWrapper(mount(AdminView)) };
@@ -121,6 +128,9 @@ describe("AdminView subsystem shell", () => {
         sessionAuthenticated = true;
         return { ok: true, status: 200, json: async () => ({ ok: true }) };
       }
+      if (url.includes("/api/admin/session") && sessionAuthenticated) {
+        return response({ account: "admin" });
+      }
       if (!sessionAuthenticated) return { ok: false, status: 401, json: async () => ({}) };
       return { ok: true, status: 200, json: async () => url.includes("/api/admin/visits") ? emptyVisits : emptyApplications };
     });
@@ -136,7 +146,7 @@ describe("AdminView subsystem shell", () => {
 
     const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
     expect(wrapper.text()).toContain("WalletCheck 有效浏览");
-    expect(requestedUrls.filter(url => url.includes("/api/admin/visits") && url.includes("systemCode=walletcheck"))).toHaveLength(2);
+    expect(requestedUrls.filter(url => url.includes("/api/admin/visits") && url.includes("systemCode=walletcheck"))).toHaveLength(1);
     expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
   });
 
@@ -150,6 +160,9 @@ describe("AdminView subsystem shell", () => {
       if (url.includes("/api/admin/logout")) {
         sessionAuthenticated = false;
         return response({}, 204);
+      }
+      if (url.includes("/api/admin/session") && sessionAuthenticated) {
+        return response({ account: "admin" });
       }
       if (!sessionAuthenticated) return response({}, 401);
       return response(url.includes("/api/admin/visits") ? emptyVisits : emptyApplications);
@@ -213,6 +226,130 @@ describe("AdminView subsystem shell", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("/latest-recruitment");
     expect(wrapper.text()).not.toContain("/stale-wallet");
+  });
+
+  it("releases a pending visit request when returning home and ignores its late response", async () => {
+    const pendingVisit = deferred<ReturnType<typeof response>>();
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
+      if (url.includes("/api/admin/visits")) return pendingVisit.promise;
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    await wrapper.get("[data-testid='walletcheck-entry']").trigger("click");
+    expect(setupValue<boolean>(wrapper, "loading")).toBe(true);
+    await wrapper.get("[data-testid='system-home']").trigger("click");
+
+    expect(wrapper.text()).toContain("系统管理");
+    expect(setupValue<boolean>(wrapper, "loading")).toBe(false);
+
+    await wrapper.get("[data-testid='recruitment-entry']").trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".admin-empty").exists()).toBe(true);
+
+    pendingVisit.resolve(response(visitResponse(41, "/stale-home-visit", "walletcheck")));
+    await flushPromises();
+    expect(wrapper.text()).toContain("候选人管理");
+    expect(wrapper.text()).not.toContain("/stale-home-visit");
+    expect(wrapper.text()).not.toContain("有效浏览数据加载失败。");
+  });
+
+  it("keeps jobs loading and error ownership when a previous visit request rejects", async () => {
+    const pendingVisit = deferred<ReturnType<typeof response>>();
+    const pendingJobs = deferred<ReturnType<typeof response>>();
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
+      if (url.includes("/api/admin/visits")) return pendingVisit.promise;
+      if (url.includes("/api/admin/jobs")) return pendingJobs.promise;
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/recruitment");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    await wrapper.get(".admin-modules button:nth-child(2)").trigger("click");
+    await wrapper.get(".admin-modules button:nth-child(3)").trigger("click");
+    pendingVisit.reject(new Error("late visit failure"));
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("招聘岗位");
+    expect(wrapper.text()).not.toContain("有效浏览数据加载失败。");
+    expect(wrapper.find(".admin-job-empty").exists()).toBe(false);
+    expect(setupValue<boolean>(wrapper, "loading")).toBe(true);
+
+    pendingJobs.resolve(response([]));
+    await flushPromises();
+    expect(wrapper.find(".admin-job-empty").exists()).toBe(true);
+  });
+
+  it("restores the exact authenticated principal and loads only the visible subsystem", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored.operator" });
+      if (url.includes("/api/admin/visits")) return response(emptyVisits);
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/walletcheck/visits");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='current-account']").text()).toContain("restored.operator");
+    const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls.some(url => url.includes("/api/admin/session"))).toBe(true);
+    expect(requestedUrls.some(url => url.includes("/api/admin/visits") && url.includes("systemCode=walletcheck"))).toBe(true);
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
+  });
+
+  it("keeps the cleared logged-out session after all stale module requests resolve", async () => {
+    const pendingApplications = deferred<ReturnType<typeof response>>();
+    const pendingVisits = deferred<ReturnType<typeof response>>();
+    const pendingJobs = deferred<ReturnType<typeof response>>();
+    const pendingTemplate = deferred<ReturnType<typeof response>>();
+    let deferModuleReads = false;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
+      if (url.includes("/api/admin/logout")) return response({}, 204);
+      if (url.includes("/api/admin/applications")) {
+        return deferModuleReads ? pendingApplications.promise : response(emptyApplications);
+      }
+      if (url.includes("/api/admin/visits")) return pendingVisits.promise;
+      if (url.includes("/api/admin/jobs")) return pendingJobs.promise;
+      if (url.includes("/api/admin/site-settings")) return pendingTemplate.promise;
+      return response({ ok: true });
+    });
+    window.history.replaceState({}, "", "/admin/");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    deferModuleReads = true;
+    await wrapper.get("[data-testid='recruitment-entry']").trigger("click");
+    await wrapper.get(".admin-modules button:nth-child(2)").trigger("click");
+    await wrapper.get(".admin-modules button:nth-child(3)").trigger("click");
+    await wrapper.get(".admin-modules button:nth-child(4)").trigger("click");
+    await wrapper.get("[data-testid='logout']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("安全登录");
+    pendingApplications.resolve(response({ ok: true, applications: [{ id: 77 }], total: 1, pages: 1 }));
+    pendingVisits.resolve(response(visitResponse(78, "/stale-after-logout", "recruitment")));
+    pendingJobs.resolve(response([{ id: 79, title: "stale job" }]));
+    pendingTemplate.resolve(response({ activeTemplate: "apple", defaultLanguage: "en" }));
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("安全登录");
+    expect((wrapper.get("input[autocomplete='username']").element as HTMLInputElement).value).toBe("");
+    expect(setupValue<unknown[]>(wrapper, "applications")).toEqual([]);
+    expect(setupValue<unknown[]>(wrapper, "visits")).toEqual([]);
+    expect(setupValue<unknown[]>(wrapper, "jobs")).toEqual([]);
+    expect(setupValue<string>(wrapper, "activeTemplate")).toBe("technology");
+    expect(setupValue<string>(wrapper, "defaultLanguage")).toBe("auto");
+    expect(setupValue<boolean>(wrapper, "authenticated")).toBe(false);
   });
 
   it("synchronizes the displayed subsystem when browser history changes", async () => {
