@@ -43,7 +43,7 @@ const total = ref(0);
 const pages = ref(0);
 const loading = ref(false);
 const error = ref("");
-let page = 0;
+const page = ref(0);
 let controller: AbortController | null = null;
 let generation = 0;
 
@@ -87,7 +87,7 @@ async function load() {
   error.value = "";
   const listParams = new URLSearchParams({
     systemCode: "research",
-    page: String(page),
+    page: String(page.value),
     size: "20",
     minDurationSeconds: String(Math.max(0, Number(filters.minDurationSeconds) || 0)),
     maxDurationSeconds: String(filters.maxDurationSeconds === "" ? 86400 : Math.max(0, Number(filters.maxDurationSeconds) || 0)),
@@ -116,7 +116,13 @@ async function load() {
 }
 
 function search() {
-  page = 0;
+  page.value = 0;
+  void load();
+}
+
+function goToPage(nextPage: number) {
+  if (nextPage < 0 || nextPage >= pages.value || nextPage === page.value) return;
+  page.value = nextPage;
   void load();
 }
 
@@ -173,6 +179,13 @@ onBeforeUnmount(() => {
           <tr v-if="!loading && !visits.length"><td class="research-visits-empty" colspan="7">暂无符合条件的有效浏览</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="research-pagination" aria-label="有效浏览分页">
+      <span data-testid="visits-page-status">第 {{ pages ? page + 1 : 0 }} / {{ pages }} 页 · 共 <b>{{ total }}</b> 条</span>
+      <div>
+        <button type="button" data-testid="visits-previous" :disabled="loading || page === 0" @click="goToPage(page - 1)">← 上一页</button>
+        <button type="button" data-testid="visits-next" :disabled="loading || pages === 0 || page >= pages - 1" @click="goToPage(page + 1)">下一页 →</button>
+      </div>
     </div>
   </section>
 </template>

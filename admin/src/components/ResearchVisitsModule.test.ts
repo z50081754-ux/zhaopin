@@ -113,6 +113,58 @@ describe("ResearchVisitsModule", () => {
     );
   });
 
+  it("loads page one so the twenty-first research visit is reachable, then returns to page zero", async () => {
+    const pageOne = { visits: [{ ...visit, id: 21, entry_path: "/research/21" }], total: 21, pages: 2 };
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/summary")) return response(summary);
+      return response(new URL(url, "https://admin.test").searchParams.get("page") === "1" ? pageOne : { ...list, total: 21, pages: 2 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 1 / 2 页 · 共 21 条");
+    expect(wrapper.get("[data-testid='visits-previous']").attributes("disabled")).toBeDefined();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/visits?systemCode=research&page=1&size=20&minDurationSeconds=0&maxDurationSeconds=86400&submittedResearch=all",
+      expect.objectContaining({ credentials: "include" })
+    );
+    expect(wrapper.get("[data-testid='research-visit-row-21']").text()).toContain("/research/21");
+    expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 2 / 2 页 · 共 21 条");
+    expect(wrapper.get("[data-testid='visits-next']").attributes("disabled")).toBeDefined();
+
+    await wrapper.get("[data-testid='visits-previous']").trigger("click");
+    await flushPromises();
+    expect(fetch).toHaveBeenLastCalledWith(initialListUrl, expect.objectContaining({ credentials: "include" }));
+    expect(wrapper.find("[data-testid='research-visit-row-7']").exists()).toBe(true);
+  });
+
+  it("resets a later page to zero when applying filters while preserving the filter values", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/summary")) return response(summary);
+      return response({ ...list, total: 21, pages: 2 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(ResearchVisitsModule, { props: { apiBase: "" } });
+    await flushPromises();
+    await wrapper.get("[data-testid='visits-next']").trigger("click");
+    await flushPromises();
+
+    await wrapper.get("[data-testid='visits-min-duration']").setValue("60");
+    await wrapper.get("[data-testid='visits-submitted']").setValue("false");
+    await wrapper.get("[data-testid='visits-search']").trigger("click");
+    await flushPromises();
+
+    expect(fetch).toHaveBeenLastCalledWith(
+      "/api/admin/visits?systemCode=research&page=0&size=20&minDurationSeconds=60&maxDurationSeconds=86400&submittedResearch=false",
+      expect.objectContaining({ credentials: "include" })
+    );
+    expect(wrapper.get("[data-testid='visits-page-status']").text()).toContain("第 1 / 2 页");
+  });
+
   it("renders the actual metrics and complete research visit fields", async () => {
     const incompleteVisit = { ...visit, submitted_research: false, visitor_country: "UNKNOWN" };
     const fetch = vi.fn(async (url: string) => response(url.includes("/summary") ? summary : {

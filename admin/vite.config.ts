@@ -13,7 +13,8 @@ export default defineConfig({
         target: "http://localhost:8080",
         changeOrigin: true,
         configure(proxy) {
-          proxy.on("proxyReq", proxyRequest => proxyRequest.removeHeader("origin"));
+          const eventedProxy = proxy as unknown as { on(event: "proxyReq", listener: (proxyRequest: { removeHeader(name: string): void }) => void): void };
+          eventedProxy.on("proxyReq", proxyRequest => proxyRequest.removeHeader("origin"));
         }
       }
     }
