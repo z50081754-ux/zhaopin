@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
 import {
   deleteResearchBatch,
   deleteResearchSubmission,
@@ -35,6 +35,9 @@ const summary = ref<ResearchSummary>(emptySummary());
 const submissions = ref<ResearchSubmission[]>([]);
 const selectedSubmissionIds = ref<number[]>([]);
 const selectedDetail = ref<ResearchDetail | null>(null);
+const detailDrawer = ref<HTMLElement | null>(null);
+const detailCloseButton = ref<HTMLButtonElement | null>(null);
+const detailInvoker = ref<HTMLElement | null>(null);
 const total = ref(0);
 const pages = ref(0);
 const loading = ref(false);
@@ -81,7 +84,7 @@ function requestError(action: string, reason: unknown) {
   error.value = `${action}失败：${reason instanceof Error ? reason.message : "请稍后重试"}`;
 }
 
-async function loadSubmissions(resetSelection = true) {
+async function loadSubmissions(resetSelection = true, propagateError = false) {
   listLoading.value = true;
   if (resetSelection) selectedSubmissionIds.value = [];
   try {
@@ -90,6 +93,7 @@ async function loadSubmissions(resetSelection = true) {
     total.value = result.total || 0;
     pages.value = result.pages || 0;
   } catch (reason) {
+    if (propagateError) throw reason;
     requestError("调研记录加载", reason);
   } finally {
     listLoading.value = false;
@@ -117,7 +121,7 @@ async function loadDashboard() {
 async function refreshAfterMutation() {
   const [summaryResult] = await Promise.all([
     loadResearchSummary(props.apiBase),
-    loadSubmissions()
+    loadSubmissions(true, true)
   ]);
   summary.value = summaryResult;
 }
@@ -163,16 +167,30 @@ function toggleAll() {
     : Array.from(new Set([...selectedSubmissionIds.value, ...pageIds]));
 }
 
-async function openDetail(submission: ResearchSubmission) {
+function invokerFrom(event?: Event) {
+  const invoker = event?.currentTarget;
+  return invoker instanceof HTMLElement ? invoker : null;
+}
+
+async function showDetail(detail: ResearchDetail, invoker: HTMLElement | null) {
+  detailInvoker.value = invoker;
+  selectedDetail.value = detail;
+  await nextTick();
+  detailCloseButton.value?.focus();
+}
+
+async function openDetail(submission: ResearchSubmission, event: Event) {
+  const invoker = invokerFrom(event);
   error.value = "";
   try {
-    selectedDetail.value = await loadResearchDetail(props.apiBase, submission.id);
+    await showDetail(await loadResearchDetail(props.apiBase, submission.id), invoker);
   } catch (reason) {
     requestError("详情读取", reason);
   }
 }
 
-async function findWallet() {
+async function findWallet(event?: Event) {
+  const invoker = invokerFrom(event);
   const address = walletLookup.value.trim();
   if (!address) {
     error.value = "请输入完整 TRC20 钱包地址后再精确查找。";
@@ -180,11 +198,42 @@ async function findWallet() {
   }
   error.value = "";
   try {
-    selectedDetail.value = await lookupResearchWallet(props.apiBase, address);
+    await showDetail(await lookupResearchWallet(props.apiBase, address), invoker);
     walletLookup.value = "";
   } catch (reason) {
     requestError("钱包精确查找", reason);
   }
+}
+
+function focusableDetailElements() {
+  return Array.from(detailDrawer.value?.querySelectorAll<HTMLElement>(
+    "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+  ) || []).filter(element => !element.hasAttribute("hidden"));
+}
+
+function trapDetailFocus(event: KeyboardEvent) {
+  if (event.key !== "Tab") return;
+  const focusable = focusableDetailElements();
+  if (!focusable.length) {
+    event.preventDefault();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+async function closeDetail() {
+  selectedDetail.value = null;
+  await nextTick();
+  detailInvoker.value?.focus();
+  detailInvoker.value = null;
 }
 
 async function exportCsv() {
@@ -205,11 +254,16 @@ async function deleteOne(submission: ResearchSubmission) {
   if (!window.confirm(`确定删除调研记录 ${submission.submissionNumber} 吗？删除后无法恢复。`)) return;
   loading.value = true;
   error.value = "";
+  notice.value = "";
   try {
     await deleteResearchSubmission(props.apiBase, submission.id);
     if (submissions.value.length === 1 && filters.page > 0) filters.page--;
-    await refreshAfterMutation();
-    notice.value = `已删除调研记录 ${submission.submissionNumber}。`;
+    try {
+      await refreshAfterMutation();
+      notice.value = `已删除调研记录 ${submission.submissionNumber}。`;
+    } catch {
+      notice.value = `已删除调研记录 ${submission.submissionNumber}，但刷新失败。`;
+    }
   } catch (reason) {
     requestError("调研记录删除", reason);
   } finally {
@@ -225,13 +279,18 @@ async function deleteSelected() {
   if (!window.confirm(`确定删除以下 ${ids.length} 条调研记录吗？\n${targets}\n删除后无法恢复。`)) return;
   loading.value = true;
   error.value = "";
+  notice.value = "";
   try {
     await deleteResearchBatch(props.apiBase, ids);
     if (submissions.value.every(submission => ids.includes(submission.id)) && filters.page > 0) {
       filters.page--;
     }
-    await refreshAfterMutation();
-    notice.value = `已删除 ${ids.length} 条已选调研记录。`;
+    try {
+      await refreshAfterMutation();
+      notice.value = `已删除 ${ids.length} 条已选调研记录。`;
+    } catch {
+      notice.value = `已删除 ${ids.length} 条已选调研记录，但刷新失败。`;
+    }
   } catch (reason) {
     requestError("批量删除", reason);
   } finally {
@@ -295,15 +354,15 @@ onMounted(() => void loadDashboard());
       </div>
     </section>
 
-    <p class="research-scroll-tip">← 左右滑动查看记录；点击任意记录查看受保护的完整详情 →</p>
+    <p class="research-scroll-tip">← 左右滑动查看记录；使用“查看详情”读取受保护的完整详情 →</p>
     <div class="research-table-wrap">
       <table class="research-table">
         <thead><tr><th><input type="checkbox" :checked="allOnPageSelected" aria-label="选择本页调研记录" @change="toggleAll"></th><th>提交编号</th><th>来源</th><th>评分</th><th>场景</th><th>顾虑</th><th>反馈</th><th>钱包地址（脱敏）</th><th>提交时间</th><th>操作</th></tr></thead>
         <tbody>
-          <tr v-for="submission in submissions" :key="submission.id" :data-testid="`research-row-${submission.id}`" tabindex="0" role="button" @click="openDetail(submission)" @keydown.enter="openDetail(submission)" @keydown.space.prevent="openDetail(submission)">
+          <tr v-for="submission in submissions" :key="submission.id" :data-testid="`research-row-${submission.id}`">
             <td><input v-model="selectedSubmissionIds" :data-testid="`select-submission-${submission.id}`" :value="submission.id" type="checkbox" :aria-label="`选择调研记录 ${submission.submissionNumber}`" @click.stop></td>
             <td><b>{{ submission.submissionNumber }}</b></td><td>{{ submission.source }}</td><td>{{ submission.rating }} 分</td><td>{{ submission.scenes.join("、") }}</td><td>{{ submission.concern }}</td><td>{{ display(submission.feedback) }}</td><td>{{ submission.maskedWalletAddress }}</td><td>{{ formatDate(submission.createdAt) }}</td>
-            <td><button class="research-delete research-delete-one" type="button" :disabled="loading" @click.stop="deleteOne(submission)">删除</button></td>
+            <td class="research-row-actions"><button :data-testid="`research-detail-button-${submission.id}`" class="research-detail" type="button" @click="openDetail(submission, $event)">查看详情</button><button class="research-delete research-delete-one" type="button" :disabled="loading" @click="deleteOne(submission)">删除</button></td>
           </tr>
           <tr v-if="!listLoading && !submissions.length"><td colspan="10" class="research-empty">暂无符合条件的调研记录</td></tr>
         </tbody>
@@ -314,9 +373,9 @@ onMounted(() => void loadDashboard());
       <div><button type="button" :disabled="filters.page === 0 || listLoading" @click="goToPage(filters.page - 1)">← 上一页</button><button v-for="page in pages" :key="page" type="button" :class="{ active: page - 1 === filters.page }" :disabled="listLoading" @click="goToPage(page - 1)">{{ page }}</button><button type="button" :disabled="filters.page >= pages - 1 || listLoading" @click="goToPage(filters.page + 1)">下一页 →</button></div>
     </div>
 
-    <div v-if="selectedDetail" class="admin-drawer-backdrop" @click.self="selectedDetail = null">
-      <aside data-testid="research-detail-drawer" class="admin-drawer research-drawer" role="dialog" aria-modal="true" aria-label="调研记录详情">
-        <button class="modal-close" type="button" aria-label="关闭详情" @click="selectedDetail = null">×</button>
+    <div v-if="selectedDetail" class="admin-drawer-backdrop" @click.self="closeDetail">
+      <aside ref="detailDrawer" data-testid="research-detail-drawer" class="admin-drawer research-drawer" role="dialog" aria-modal="true" aria-label="调研记录详情" tabindex="-1" @keydown="trapDetailFocus" @keydown.esc.prevent="closeDetail">
+        <button ref="detailCloseButton" data-testid="research-detail-close" class="modal-close" type="button" aria-label="关闭详情" @click="closeDetail">×</button>
         <small>{{ selectedDetail.submissionNumber }}</small><h2>调研记录详情</h2>
         <section><h3>问卷回答</h3><dl><div><dt>来源</dt><dd>{{ selectedDetail.source }}</dd></div><div><dt>评分</dt><dd>{{ selectedDetail.rating }} 分</dd></div><div><dt>使用场景</dt><dd>{{ selectedDetail.scenes.join("、") }}</dd></div><div><dt>主要顾虑</dt><dd>{{ selectedDetail.concern }}</dd></div><div><dt>反馈</dt><dd>{{ display(selectedDetail.feedback) }}</dd></div></dl></section>
         <section><h3>受保护信息</h3><dl><div><dt>网络</dt><dd>{{ selectedDetail.walletNetwork }}</dd></div><div><dt>完整钱包地址</dt><dd class="research-full-wallet">{{ selectedDetail.walletAddress }}</dd></div><div><dt>条款版本</dt><dd>{{ selectedDetail.termsVersion }}</dd></div><div><dt>同意时间</dt><dd>{{ formatDate(selectedDetail.consentedAt) }}</dd></div><div><dt>提交时间</dt><dd>{{ formatDate(selectedDetail.createdAt) }}</dd></div></dl></section>
