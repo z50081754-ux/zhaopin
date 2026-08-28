@@ -44,6 +44,75 @@ function visitResponse(id: number, entryPath: string, systemCode: "recruitment" 
   };
 }
 
+function applicationResponse(id: number) {
+  return {
+    ok: true,
+    applications: [{
+      id,
+      application_no: `APP-${id}`,
+      resume_name: "stale candidate",
+      telegram: "@stale",
+      gender: "female",
+      age: "28",
+      birth_date: "1998-01-01",
+      nationality_country: "TH",
+      job_title: "Engineer",
+      current_salary: "2000",
+      referrer: "",
+      remarks: "",
+      expected_salary: "3000",
+      bc_experience: "yes",
+      employment_status: "employed",
+      education_type: "bachelor",
+      school: "Test University",
+      education_period: "2016-2020",
+      passport_status: "valid",
+      visa_status: "valid",
+      interview_time: "any",
+      start_time: "2026-09-01",
+      current_country: "TH",
+      preferred_country: "TH",
+      stage: "new",
+      is_possible_duplicate: 0,
+      original_filename: "resume.pdf",
+      resume_size: 1024,
+      ip_address: "127.0.0.1",
+      device_type: "desktop",
+      device_model: "Test PC",
+      operating_system: "Test OS",
+      browser_name: "Test Browser",
+      screen_resolution: "1920x1080",
+      device_language: "zh-CN",
+      device_timezone: "Asia/Bangkok",
+      user_agent: "test-agent",
+      created_at: "2026-08-28T00:00:00Z"
+    }],
+    total: 1,
+    pages: 1
+  };
+}
+
+function jobResponse(id: number) {
+  return [{
+    id,
+    slug: `stale-job-${id}`,
+    title: "stale job",
+    category: "技术岗位",
+    businessUnit: "XW",
+    requiredLocation: "泰国",
+    workMode: "远程",
+    salaryRange: "2000-3000",
+    internationalSalaryRange: "3000-4500",
+    summary: "stale",
+    responsibilities: ["stale"],
+    requirements: ["stale"],
+    bonus: [],
+    status: "open",
+    recruitmentCount: 1,
+    updatedAt: "2026-08-28T00:00:00Z"
+  }];
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -305,50 +374,155 @@ describe("AdminView subsystem shell", () => {
     expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
   });
 
-  it("keeps the cleared logged-out session after all stale module requests resolve", async () => {
-    const pendingApplications = deferred<ReturnType<typeof response>>();
-    const pendingVisits = deferred<ReturnType<typeof response>>();
+  it("keeps a failed logout authoritative after the current jobs request resolves", async () => {
     const pendingJobs = deferred<ReturnType<typeof response>>();
-    const pendingTemplate = deferred<ReturnType<typeof response>>();
-    let deferModuleReads = false;
     const fetch = vi.fn(async (url: string) => {
       if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
-      if (url.includes("/api/admin/logout")) return response({}, 204);
-      if (url.includes("/api/admin/applications")) {
-        return deferModuleReads ? pendingApplications.promise : response(emptyApplications);
-      }
-      if (url.includes("/api/admin/visits")) return pendingVisits.promise;
+      if (url.includes("/api/admin/logout")) return response({}, 500);
       if (url.includes("/api/admin/jobs")) return pendingJobs.promise;
-      if (url.includes("/api/admin/site-settings")) return pendingTemplate.promise;
-      return response({ ok: true });
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/recruitment");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    await wrapper.get(".admin-modules button:nth-child(3)").trigger("click");
+    await wrapper.get("[data-testid='logout']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("退出登录失败，请稍后重试。");
+    expect(setupValue<boolean>(wrapper, "authenticated")).toBe(true);
+    expect(setupValue<boolean>(wrapper, "loading")).toBe(false);
+
+    pendingJobs.resolve(response(jobResponse(77)));
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("退出登录失败，请稍后重试。");
+    expect(setupValue<unknown[]>(wrapper, "jobs")).toEqual([]);
+    expect(setupValue<boolean>(wrapper, "authenticated")).toBe(true);
+    expect(setupValue<boolean>(wrapper, "loading")).toBe(false);
+  });
+
+  it("keeps a failed logout authoritative after the current visit request rejects", async () => {
+    const pendingVisits = deferred<ReturnType<typeof response>>();
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
+      if (url.includes("/api/admin/logout")) return response({}, 500);
+      if (url.includes("/api/admin/visits")) return pendingVisits.promise;
+      return response(emptyApplications);
+    });
+    window.history.replaceState({}, "", "/admin/walletcheck/visits");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+
+    await wrapper.get("[data-testid='logout']").trigger("click");
+    await flushPromises();
+    pendingVisits.reject(new Error("late visit failure"));
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("退出登录失败，请稍后重试。");
+    expect(wrapper.text()).not.toContain("有效浏览数据加载失败。");
+    expect(setupValue<boolean>(wrapper, "authenticated")).toBe(true);
+    expect(setupValue<boolean>(wrapper, "loading")).toBe(false);
+  });
+
+  it("makes logout single-flight and disables its button until success", async () => {
+    const pendingLogout = deferred<ReturnType<typeof response>>();
+    let logoutRequests = 0;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
+      if (url.includes("/api/admin/logout")) {
+        logoutRequests += 1;
+        return pendingLogout.promise;
+      }
+      return response(emptyApplications);
     });
     window.history.replaceState({}, "", "/admin/");
     vi.stubGlobal("fetch", fetch);
     const wrapper = trackWrapper(mount(AdminView));
     await flushPromises();
 
-    deferModuleReads = true;
-    await wrapper.get("[data-testid='recruitment-entry']").trigger("click");
-    await wrapper.get(".admin-modules button:nth-child(2)").trigger("click");
-    await wrapper.get(".admin-modules button:nth-child(3)").trigger("click");
-    await wrapper.get(".admin-modules button:nth-child(4)").trigger("click");
+    const logoutButton = wrapper.get("[data-testid='logout']");
+    await logoutButton.trigger("click");
+    expect.soft(logoutButton.attributes("disabled")).toBeDefined();
+    await logoutButton.trigger("click");
+    expect(logoutRequests).toBe(1);
+
+    pendingLogout.resolve(response({}, 204));
+    await flushPromises();
+    expect(wrapper.text()).toContain("安全登录");
+    expect(setupValue<boolean>(wrapper, "authenticated")).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "applications",
+      path: "/admin/recruitment",
+      endpoint: "/api/admin/applications",
+      activate: "",
+      staleBody: applicationResponse(81),
+      stateName: "applications",
+      clearedValue: []
+    },
+    {
+      name: "visits",
+      path: "/admin/walletcheck/visits",
+      endpoint: "/api/admin/visits",
+      activate: "",
+      staleBody: visitResponse(82, "/stale-direct-visit", "walletcheck"),
+      stateName: "visits",
+      clearedValue: []
+    },
+    {
+      name: "jobs",
+      path: "/admin/recruitment",
+      endpoint: "/api/admin/jobs",
+      activate: ".admin-modules button:nth-child(3)",
+      staleBody: jobResponse(83),
+      stateName: "jobs",
+      clearedValue: []
+    },
+    {
+      name: "templates",
+      path: "/admin/recruitment",
+      endpoint: "/api/admin/site-settings",
+      activate: ".admin-modules button:nth-child(4)",
+      staleBody: { activeTemplate: "apple", defaultLanguage: "en" },
+      stateName: "activeTemplate",
+      clearedValue: "technology"
+    }
+  ])("prevents the current $name loader from writing while successful logout is in flight", async testCase => {
+    const pendingLoader = deferred<ReturnType<typeof response>>();
+    const pendingLogout = deferred<ReturnType<typeof response>>();
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/session")) return response({ account: "restored-admin" });
+      if (url.includes("/api/admin/logout")) return pendingLogout.promise;
+      if (url.includes(testCase.endpoint)) return pendingLoader.promise;
+      if (url.includes("/api/admin/applications")) return response(emptyApplications);
+      if (url.includes("/api/admin/visits")) return response(emptyVisits);
+      if (url.includes("/api/admin/jobs")) return response([]);
+      if (url.includes("/api/admin/site-settings")) return response({ activeTemplate: "technology", defaultLanguage: "auto" });
+      return response({ ok: true });
+    });
+    window.history.replaceState({}, "", testCase.path);
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = trackWrapper(mount(AdminView));
+    await flushPromises();
+    if (testCase.activate) await wrapper.get(testCase.activate).trigger("click");
+
     await wrapper.get("[data-testid='logout']").trigger("click");
+    pendingLoader.resolve(response(testCase.staleBody));
     await flushPromises();
 
-    expect(wrapper.text()).toContain("安全登录");
-    pendingApplications.resolve(response({ ok: true, applications: [{ id: 77 }], total: 1, pages: 1 }));
-    pendingVisits.resolve(response(visitResponse(78, "/stale-after-logout", "recruitment")));
-    pendingJobs.resolve(response([{ id: 79, title: "stale job" }]));
-    pendingTemplate.resolve(response({ activeTemplate: "apple", defaultLanguage: "en" }));
-    await flushPromises();
+    expect(setupValue<unknown>(wrapper, testCase.stateName)).toEqual(testCase.clearedValue);
+    expect(setupValue<boolean>(wrapper, "authenticated")).toBe(true);
 
+    pendingLogout.resolve(response({}, 204));
+    await flushPromises();
     expect(wrapper.text()).toContain("安全登录");
-    expect((wrapper.get("input[autocomplete='username']").element as HTMLInputElement).value).toBe("");
-    expect(setupValue<unknown[]>(wrapper, "applications")).toEqual([]);
-    expect(setupValue<unknown[]>(wrapper, "visits")).toEqual([]);
-    expect(setupValue<unknown[]>(wrapper, "jobs")).toEqual([]);
-    expect(setupValue<string>(wrapper, "activeTemplate")).toBe("technology");
-    expect(setupValue<string>(wrapper, "defaultLanguage")).toBe("auto");
+    expect(setupValue<unknown>(wrapper, testCase.stateName)).toEqual(testCase.clearedValue);
     expect(setupValue<boolean>(wrapper, "authenticated")).toBe(false);
   });
 

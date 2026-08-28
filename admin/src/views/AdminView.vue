@@ -41,6 +41,7 @@ const API_BASE=(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
 const PUBLIC_SITE_URL=import.meta.env.VITE_PUBLIC_SITE_URL||"/";
 const apiUrl=(path:string)=>`${API_BASE}${path}`;
 const account=ref(""), password=ref(""), authenticated=ref(false), loading=ref(false), error=ref("");
+const logoutInFlight=ref(false);
 const activeSystem=ref<AdminSystem>(parseAdminPath(window.location.pathname));
 type SiteTemplate="technology"|"apple";
 type DefaultLanguage="auto"|"zh"|"en";
@@ -259,15 +260,18 @@ async function login(){
   finally{finishLoading(owner)}
 }
 async function logout(){
+  if(logoutInFlight.value)return;
+  logoutInFlight.value=true;invalidateViewRequests();
   const owner=beginSessionRequest();
   try{
     const response=await fetch(apiUrl("/api/admin/logout"),{method:"POST",credentials:"include"});
     if(!response.ok&&response.status!==401)throw new Error("REQUEST_FAILED");
     if(!ownsSessionRequest(owner))return;
-  }catch{if(ownsSessionRequest(owner))error.value="退出登录失败，请稍后重试。";finishLoading(owner);return}
-  if(clearAuthenticatedSession(owner.sessionGeneration)){
-    activeSystem.value="home";window.history.pushState({},"",pathForAdminSystem("home"));
-  }
+    if(clearAuthenticatedSession(owner.sessionGeneration)){
+      activeSystem.value="home";window.history.pushState({},"",pathForAdminSystem("home"));
+    }
+  }catch{if(ownsSessionRequest(owner))error.value="退出登录失败，请稍后重试。"}
+  finally{finishLoading(owner);logoutInFlight.value=false}
 }
 async function openApplication(item:Application){
   const owner=beginViewRequest();
@@ -431,7 +435,7 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
           <button v-if="activeSystem!=='home'" type="button" data-testid="system-home" @click="navigateSystem('home')">← 返回系统首页</button>
           <span v-if="account" data-testid="current-account">账号：{{account}}</span>
           <a v-if="activeSystem!=='walletcheck'" :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a>
-          <button type="button" data-testid="logout" @click="logout">退出登录</button>
+          <button type="button" data-testid="logout" :disabled="logoutInFlight" @click="logout">退出登录</button>
         </div>
       </header>
       <section v-if="activeSystem==='home'" class="admin-main system-home">
