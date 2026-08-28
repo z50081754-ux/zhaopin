@@ -53,4 +53,56 @@ describe("AdminView subsystem shell", () => {
     expect(wrapper.text()).toContain("有效浏览");
     expect(wrapper.text()).not.toContain("查询过地址");
   });
+
+  it("loads only WalletCheck visits for a direct WalletCheck session", async () => {
+    const { fetch, wrapper } = mountAdmin("/admin/walletcheck/visits");
+    await flushPromises();
+
+    const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
+    expect(wrapper.text()).toContain("WalletCheck 有效浏览");
+    expect(requestedUrls.some(url => url.includes("/api/admin/visits") && url.includes("systemCode=walletcheck"))).toBe(true);
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
+  });
+
+  it("loads only WalletCheck visits after WalletCheck login", async () => {
+    let sessionAuthenticated = false;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("/api/admin/login")) {
+        sessionAuthenticated = true;
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      if (!sessionAuthenticated) return { ok: false, status: 401, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => url.includes("/api/admin/visits") ? emptyVisits : emptyApplications };
+    });
+    window.history.replaceState({}, "", "/admin/walletcheck/visits");
+    vi.stubGlobal("fetch", fetch);
+    const wrapper = mount(AdminView);
+    await flushPromises();
+
+    await wrapper.get("input[autocomplete='username']").setValue("admin");
+    await wrapper.get("input[autocomplete='current-password']").setValue("secret");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+
+    const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
+    expect(wrapper.text()).toContain("WalletCheck 有效浏览");
+    expect(requestedUrls.filter(url => url.includes("/api/admin/visits") && url.includes("systemCode=walletcheck"))).toHaveLength(2);
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
+  });
+
+  it("synchronizes the displayed subsystem when browser history changes", async () => {
+    const { wrapper } = mountAdmin("/admin/");
+    await flushPromises();
+
+    window.history.replaceState({}, "", "/admin/walletcheck/visits");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flushPromises();
+    expect(wrapper.text()).toContain("WalletCheck 有效浏览");
+
+    window.history.replaceState({}, "", "/admin/recruitment");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flushPromises();
+    expect(wrapper.text()).toContain("候选人管理");
+    expect(wrapper.text()).not.toContain("查询过地址");
+  });
 });

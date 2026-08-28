@@ -164,11 +164,18 @@ async function loadTemplate(){
   try{const result=await api<{activeTemplate:SiteTemplate;defaultLanguage:DefaultLanguage}>("/api/admin/site-settings");activeTemplate.value=result.activeTemplate;defaultLanguage.value=result.defaultLanguage||"auto";authenticated.value=true}
   catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="官网模板读取失败。"}
 }
+function loadVisibleSystem(system:AdminSystem){
+  if(system==="walletcheck")return loadVisits(system);
+  if(system==="recruitment")return loadApplications();
+  return Promise.resolve();
+}
 async function login(){
   loading.value=true;error.value="";
   try{
     await api("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({account:account.value,password:password.value})});
-    password.value="";authenticated.value=true;await Promise.all([loadApplications(),loadJobs(),loadTemplate(),...(activeSystem.value==="walletcheck"?[loadVisits("walletcheck")]:[])]);
+    password.value="";authenticated.value=true;
+    if(activeSystem.value==="walletcheck")await loadVisibleSystem(activeSystem.value);
+    else if(activeSystem.value==="recruitment")await Promise.all([loadApplications(),loadJobs(),loadTemplate()]);
   }catch{error.value="账号或密码错误，或后端服务尚未启动。"}finally{loading.value=false}
 }
 async function openApplication(item:Application){
@@ -281,15 +288,15 @@ function switchModule(module:"applications"|"visits"|"jobs"|"templates"|"researc
 function navigateSystem(system:AdminSystem){
   activeSystem.value=system;
   window.history.pushState({},"",pathForAdminSystem(system));
-  if(system==="walletcheck")void loadVisits(system);
+  void loadVisibleSystem(system);
 }
 function syncSystemFromPath(){
   activeSystem.value=parseAdminPath(window.location.pathname);
-  if(activeSystem.value==="walletcheck")void loadVisits(activeSystem.value);
+  void loadVisibleSystem(activeSystem.value);
 }
 onMounted(()=>{
-  void loadApplications();
-  if(activeSystem.value==="walletcheck")void loadVisits(activeSystem.value);
+  if(activeSystem.value==="home")void loadApplications();
+  else void loadVisibleSystem(activeSystem.value);
   window.addEventListener("popstate",syncSystemFromPath);
 });
 onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
