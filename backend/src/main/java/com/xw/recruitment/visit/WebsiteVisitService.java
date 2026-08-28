@@ -170,6 +170,12 @@ public class WebsiteVisitService {
         return new VisitSummary(total, average, maximum, submitted, conversionRate);
     }
 
+    public boolean isSubmittedResearch(WebsiteVisitEntity visit) {
+        return VisitSystem.RESEARCH.code().equals(visit.getSystemCode())
+            ? visit.isSubmittedResearch() || researchSubmissions.existsByVisitId(visit.getVisitId())
+            : visit.isSubmittedResearch();
+    }
+
     @Transactional
     public void delete(long id) {
         if (!repository.existsById(id)) throw new IllegalArgumentException("Visit not found.");

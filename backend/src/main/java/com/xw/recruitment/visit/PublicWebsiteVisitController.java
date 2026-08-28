@@ -61,7 +61,7 @@ public class PublicWebsiteVisitController {
         HttpServletRequest httpRequest
     ) {
         WebsiteVisitService.QualifyResult result = service.qualify(
-            VisitSystem.RESEARCH, request, regionResolver.ipAddress(httpRequest), regionResolver.country(httpRequest));
+            VisitSystem.RESEARCH, request, regionResolver.researchIpAddress(httpRequest), regionResolver.researchCountry(httpRequest));
         return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
     }
 

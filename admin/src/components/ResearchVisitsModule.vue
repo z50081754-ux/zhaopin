@@ -17,8 +17,8 @@ type ResearchVisit = {
   last_seen_at: string;
   entry_path: string;
   device_type: string;
-  device_model: string;
   browser_name: string;
+  device_language: string;
   ip_address: string;
   visitor_country: string;
   submitted_research: boolean;
@@ -159,14 +159,14 @@ onBeforeUnmount(() => {
     <p class="research-visits-scroll-tip">← 左右滑动查看访问详情 →</p>
     <div class="research-visits-table-wrap">
       <table class="research-visits-table">
-        <thead><tr><th>进入时间</th><th>有效停留</th><th>最后上报</th><th>进入页面</th><th>设备 / 浏览器</th><th>国家 / IP</th><th>问卷状态</th></tr></thead>
+        <thead><tr><th>进入时间</th><th>有效停留</th><th>最后上报</th><th>进入页面</th><th>设备类型 / 浏览器 / 语言</th><th>国家 / IP</th><th>问卷状态</th></tr></thead>
         <tbody>
           <tr v-for="visit in visits" :key="visit.id" :data-testid="`research-visit-row-${visit.id}`">
             <td>{{ new Date(visit.started_at).toLocaleString("zh-CN") }}</td>
             <td class="research-visit-duration">{{ duration(visit.duration_seconds) }}</td>
             <td>{{ new Date(visit.last_seen_at).toLocaleString("zh-CN") }}</td>
             <td :title="visit.entry_path">{{ display(visit.entry_path) }}</td>
-            <td>{{ display(visit.device_model) }} · {{ display(visit.device_type) }}<small>{{ display(visit.browser_name) }}</small></td>
+            <td>{{ display(visit.device_type) }} · {{ display(visit.browser_name) }}<small>{{ display(visit.device_language) }}</small></td>
             <td>{{ country(visit.visitor_country) }} · {{ display(visit.ip_address) }}</td>
             <td><em class="research-visit-submitted" :class="{ submitted: visit.submitted_research }">{{ visit.submitted_research ? "已提交" : "未提交" }}</em></td>
           </tr>

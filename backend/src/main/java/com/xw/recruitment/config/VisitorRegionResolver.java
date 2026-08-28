@@ -39,6 +39,22 @@ public class VisitorRegionResolver {
         return address.length() > 64 ? address.substring(0, 64) : address;
     }
 
+    public String researchIpAddress(HttpServletRequest request) {
+        String remoteAddress = request.getRemoteAddr();
+        String address = isLocalAddress(remoteAddress)
+            ? firstPresent(request.getHeader("X-Real-IP"), remoteAddress)
+            : remoteAddress;
+        if (address == null) return "";
+        address = address.trim();
+        return address.length() > 64 ? address.substring(0, 64) : address;
+    }
+
+    public String researchCountry(HttpServletRequest request) {
+        if (!isLocalAddress(request.getRemoteAddr())) return "UNKNOWN";
+        String country = firstPresent(request.getHeader("X-Trusted-Country"));
+        return country == null ? "UNKNOWN" : country.trim().toUpperCase(Locale.ROOT);
+    }
+
     private String firstPresent(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) return value;

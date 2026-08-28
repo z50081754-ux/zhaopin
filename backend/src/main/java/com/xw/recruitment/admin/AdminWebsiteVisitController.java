@@ -36,7 +36,7 @@ public class AdminWebsiteVisitController {
         Page<WebsiteVisitEntity> result = service.list(
             VisitSystem.fromCode(systemCode), page, size, minDurationSeconds,
             maxDurationSeconds, today, submittedResearch, from, to);
-        return new ListResponse(result.getContent().stream().map(VisitItem::from).toList(),
+        return new ListResponse(result.getContent().stream().map(visit -> VisitItem.from(visit, service.isSubmittedResearch(visit))).toList(),
             result.getTotalElements(), result.getTotalPages());
     }
 
@@ -92,12 +92,12 @@ public class AdminWebsiteVisitController {
         @JsonProperty("submitted_research") boolean submittedResearch,
         @JsonProperty("visitor_country") String visitorCountry
     ) {
-        static VisitItem from(WebsiteVisitEntity visit) {
+        static VisitItem from(WebsiteVisitEntity visit, boolean submittedResearch) {
             return new VisitItem(visit.getId(), visit.getVisitId(), visit.getStartedAt(), visit.getQualifiedAt(),
                 visit.getLastSeenAt(), visit.getDurationSeconds(), visit.getIpAddress(), visit.getEntryPath(), visit.getLastPath(),
                 visit.getDeviceType(), visit.getDeviceModel(), visit.getOperatingSystem(), visit.getBrowserName(),
                 visit.getScreenResolution(), visit.getDeviceLanguage(), visit.getDeviceTimezone(), visit.getUserAgent(),
-                visit.getDetectedWallets(), visit.getSystemCode(), visit.isQueriedAddress(), visit.isSubmittedResearch(),
+                visit.getDetectedWallets(), visit.getSystemCode(), visit.isQueriedAddress(), submittedResearch,
                 visit.getVisitorCountry());
         }
     }

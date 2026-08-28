@@ -62,8 +62,12 @@ public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity
            and visit.durationSeconds between :minDurationSeconds and :maxDurationSeconds
            and visit.qualifiedAt >= :qualifiedFrom and visit.qualifiedAt < :qualifiedTo
            and (:submissionFilter = 'all'
-             or (:submissionFilter = 'true' and visit.submittedResearch = true)
-             or (:submissionFilter = 'false' and visit.submittedResearch = false))
+             or (:submissionFilter = 'true' and (
+                 (:systemCode = 'research' and (visit.submittedResearch = true or exists (select 1 from com.xw.recruitment.research.ResearchSubmissionEntity submission where submission.visitId = visit.visitId)))
+                 or (:systemCode <> 'research' and visit.submittedResearch = true)))
+             or (:submissionFilter = 'false' and (
+                 (:systemCode = 'research' and visit.submittedResearch = false and not exists (select 1 from com.xw.recruitment.research.ResearchSubmissionEntity submission where submission.visitId = visit.visitId))
+                 or (:systemCode <> 'research' and visit.submittedResearch = false))))
          order by visit.qualifiedAt desc
         """)
     Page<WebsiteVisitEntity> search(
@@ -79,7 +83,11 @@ public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity
     @Query("""
         select count(visit), coalesce(avg(visit.durationSeconds), 0),
                coalesce(max(visit.durationSeconds), 0),
-               coalesce(sum(case when visit.submittedResearch = true then 1L else 0L end), 0)
+               coalesce(sum(case
+                   when :systemCode = 'research' and (visit.submittedResearch = true or exists (select 1 from com.xw.recruitment.research.ResearchSubmissionEntity submission where submission.visitId = visit.visitId)) then 1L
+                   when :systemCode <> 'research' and visit.submittedResearch = true then 1L
+                   else 0L
+               end), 0)
           from WebsiteVisitEntity visit
          where visit.systemCode = :systemCode
            and visit.qualifiedAt >= :qualifiedFrom and visit.qualifiedAt < :qualifiedTo

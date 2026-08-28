@@ -165,7 +165,11 @@ class VisitApiIntegrationTest {
     @Test
     void researchHeartbeatKeepsDurationMonotonicAndSanitizesAllPaths() throws Exception {
         mockMvc.perform(post("/api/visits/research")
-                .header("CF-IPCountry", "TH")
+                .with(request -> {
+                    request.setRemoteAddr("127.0.0.1");
+                    return request;
+                })
+                .header("X-Trusted-Country", "TH")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(researchVisitJson("visit-research-0002", 5)))
             .andExpect(status().isOk());
@@ -187,6 +191,30 @@ class VisitApiIntegrationTest {
             .andExpect(jsonPath("$.visits[0].visitor_country").value("TH"))
             .andExpect(jsonPath("$.visits[0].entry_path").value("/"))
             .andExpect(jsonPath("$.visits[0].last_path").value("/"));
+    }
+
+    @Test
+    void directResearchVisitsIgnoreForgedForwardingAndCountryHeaders() throws Exception {
+        mockMvc.perform(post("/api/visits/research")
+                .with(request -> {
+                    request.setRemoteAddr("198.51.100.77");
+                    return request;
+                })
+                .header("CF-Connecting-IP", "203.0.113.10")
+                .header("CF-IPCountry", "TH")
+                .header("X-Country-Code", "JP")
+                .header("X-Forwarded-For", "203.0.113.11")
+                .header("X-Real-IP", "203.0.113.12")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(researchVisitJson("visit-research-forged-001", 5)))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/admin/visits")
+                .with(user("admin").roles("ADMIN"))
+                .param("systemCode", "research"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.visits[0].ip_address").value("198.51.100.77"))
+            .andExpect(jsonPath("$.visits[0].visitor_country").value("UNKNOWN"));
     }
 
     @Test
