@@ -1,6 +1,7 @@
 package com.xw.recruitment.admin;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.xw.recruitment.visit.VisitSystem;
 import com.xw.recruitment.visit.WebsiteVisitEntity;
 import com.xw.recruitment.visit.WebsiteVisitService;
 import org.springframework.data.domain.Page;
@@ -22,9 +23,11 @@ public class AdminWebsiteVisitController {
         @RequestParam(defaultValue = "0") int page,
         @RequestParam(defaultValue = "20") int size,
         @RequestParam(defaultValue = "0") int minDurationSeconds,
-        @RequestParam(defaultValue = "false") boolean today
+        @RequestParam(defaultValue = "false") boolean today,
+        @RequestParam(defaultValue = "recruitment") String systemCode
     ) {
-        Page<WebsiteVisitEntity> result = service.list(page, size, minDurationSeconds, today);
+        Page<WebsiteVisitEntity> result = service.list(
+            VisitSystem.fromCode(systemCode), page, size, minDurationSeconds, today);
         return new ListResponse(result.getContent().stream().map(VisitItem::from).toList(),
             result.getTotalElements(), result.getTotalPages());
     }
@@ -61,14 +64,16 @@ public class AdminWebsiteVisitController {
         @JsonProperty("device_language") String deviceLanguage,
         @JsonProperty("device_timezone") String deviceTimezone,
         @JsonProperty("user_agent") String userAgent,
-        @JsonProperty("detected_wallets") String detectedWallets
+        @JsonProperty("detected_wallets") String detectedWallets,
+        @JsonProperty("system_code") String systemCode,
+        @JsonProperty("queried_address") boolean queriedAddress
     ) {
         static VisitItem from(WebsiteVisitEntity visit) {
             return new VisitItem(visit.getId(), visit.getVisitId(), visit.getStartedAt(), visit.getQualifiedAt(),
                 visit.getLastSeenAt(), visit.getDurationSeconds(), visit.getIpAddress(), visit.getEntryPath(), visit.getLastPath(),
                 visit.getDeviceType(), visit.getDeviceModel(), visit.getOperatingSystem(), visit.getBrowserName(),
                 visit.getScreenResolution(), visit.getDeviceLanguage(), visit.getDeviceTimezone(), visit.getUserAgent(),
-                visit.getDetectedWallets());
+                visit.getDetectedWallets(), visit.getSystemCode(), visit.isQueriedAddress());
         }
     }
 }

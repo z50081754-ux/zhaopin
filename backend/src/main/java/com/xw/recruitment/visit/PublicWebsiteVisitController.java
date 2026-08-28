@@ -22,7 +22,8 @@ public class PublicWebsiteVisitController {
         @RequestBody WebsiteVisitService.VisitRequest request,
         HttpServletRequest httpRequest
     ) {
-        WebsiteVisitService.QualifyResult result = service.qualify(request, regionResolver.ipAddress(httpRequest));
+        WebsiteVisitService.QualifyResult result = service.qualify(
+            VisitSystem.RECRUITMENT, request, regionResolver.ipAddress(httpRequest));
         return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
     }
 
@@ -31,7 +32,26 @@ public class PublicWebsiteVisitController {
         @PathVariable String visitId,
         @RequestBody WebsiteVisitService.HeartbeatRequest request
     ) {
-        service.heartbeat(visitId, request);
+        service.heartbeat(VisitSystem.RECRUITMENT, visitId, request);
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/walletcheck")
+    public Map<String, Boolean> qualifyWalletCheck(
+        @RequestBody WebsiteVisitService.VisitRequest request,
+        HttpServletRequest httpRequest
+    ) {
+        WebsiteVisitService.QualifyResult result = service.qualify(
+            VisitSystem.WALLETCHECK, request, regionResolver.ipAddress(httpRequest));
+        return Map.of("ok", true, "tracked", result.tracked(), "duplicate", result.duplicate());
+    }
+
+    @PostMapping("/walletcheck/{visitId}/heartbeat")
+    public Map<String, Boolean> heartbeatWalletCheck(
+        @PathVariable String visitId,
+        @RequestBody WebsiteVisitService.HeartbeatRequest request
+    ) {
+        service.heartbeat(VisitSystem.WALLETCHECK, visitId, request);
         return Map.of("ok", true);
     }
 }
