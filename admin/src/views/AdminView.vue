@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import XwLogo from "../components/XwLogo.vue";
 import ResearchModule from "../components/ResearchModule.vue";
+import { parseAdminPath, pathForAdminSystem, type AdminSystem } from "../systemRoute";
 
 type Application = {
   id:number; application_no:string; resume_name:string; telegram:string; gender:string; age:string;
@@ -33,12 +34,14 @@ type WebsiteVisit = {
   duration_seconds:number; ip_address:string; entry_path:string; last_path:string;
   device_type:string; device_model:string; operating_system:string; browser_name:string;
   screen_resolution:string; device_language:string; device_timezone:string; user_agent:string; detected_wallets:string;
+  system_code:string; queried_address:boolean;
 };
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||"").replace(/\/$/,"");
 const PUBLIC_SITE_URL=import.meta.env.VITE_PUBLIC_SITE_URL||"/";
 const apiUrl=(path:string)=>`${API_BASE}${path}`;
 const account=ref(""), password=ref(""), authenticated=ref(false), loading=ref(false), error=ref("");
+const activeSystem=ref<AdminSystem>(parseAdminPath(window.location.pathname));
 type SiteTemplate="technology"|"apple";
 type DefaultLanguage="auto"|"zh"|"en";
 const activeModule=ref<"applications"|"visits"|"jobs"|"templates"|"research">("applications"), query=ref(""), stage=ref("");
@@ -114,11 +117,12 @@ async function loadJobs(){
   catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="岗位数据加载失败。"}
   finally{loading.value=false}
 }
-async function loadVisits(){
+async function loadVisits(system:AdminSystem=activeSystem.value){
   loading.value=true;error.value="";selectedVisitIds.value=[];
   try{
     const minDurationSeconds=Math.max(0,Math.floor(Number(visitMinDuration.value)||0));
     const params=new URLSearchParams({page:String(visitPage.value),size:String(visitPageSize),minDurationSeconds:String(minDurationSeconds),today:String(visitTodayOnly.value)});
+    params.set("systemCode",system==="walletcheck"?"walletcheck":"recruitment");
     const result=await api<{visits:WebsiteVisit[];total:number;pages:number}>(`/api/admin/visits?${params}`);
     visits.value=result.visits||[];totalVisits.value=result.total||0;totalVisitPages.value=result.pages||0;authenticated.value=true;
   }catch(e){if((e as Error).message!=="UNAUTHORIZED")error.value="有效浏览数据加载失败。"}
@@ -164,7 +168,7 @@ async function login(){
   loading.value=true;error.value="";
   try{
     await api("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({account:account.value,password:password.value})});
-    password.value="";authenticated.value=true;await Promise.all([loadApplications(),loadJobs(),loadTemplate()]);
+    password.value="";authenticated.value=true;await Promise.all([loadApplications(),loadJobs(),loadTemplate(),...(activeSystem.value==="walletcheck"?[loadVisits("walletcheck")]:[])]);
   }catch{error.value="账号或密码错误，或后端服务尚未启动。"}finally{loading.value=false}
 }
 async function openApplication(item:Application){
@@ -274,7 +278,21 @@ function switchModule(module:"applications"|"visits"|"jobs"|"templates"|"researc
   activeModule.value=module;
   if(module==="visits")void loadVisits();else if(module==="jobs")void loadJobs();else if(module==="templates")void loadTemplate();else if(module==="applications")void loadApplications();
 }
-onMounted(loadApplications);
+function navigateSystem(system:AdminSystem){
+  activeSystem.value=system;
+  window.history.pushState({},"",pathForAdminSystem(system));
+  if(system==="walletcheck")void loadVisits(system);
+}
+function syncSystemFromPath(){
+  activeSystem.value=parseAdminPath(window.location.pathname);
+  if(activeSystem.value==="walletcheck")void loadVisits(activeSystem.value);
+}
+onMounted(()=>{
+  void loadApplications();
+  if(activeSystem.value==="walletcheck")void loadVisits(activeSystem.value);
+  window.addEventListener("popstate",syncSystemFromPath);
+});
+onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
 </script>
 
 <template>
@@ -290,16 +308,23 @@ onMounted(loadApplications);
     </section>
 
     <template v-else>
-      <header class="admin-header"><div><XwLogo/><span>招聘管理后台</span></div><a :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a></header>
-      <section class="admin-main">
-        <nav class="admin-modules">
+      <header class="admin-header"><div><XwLogo/><span>{{activeSystem==='home'?'系统管理':activeSystem==='walletcheck'?'WalletCheck':'招聘系统'}}</span></div><a :href="PUBLIC_SITE_URL" target="_blank" rel="noopener">查看招聘官网 ↗</a></header>
+      <section v-if="activeSystem==='home'" class="admin-main system-home">
+        <div class="system-home-title"><small>SYSTEM MANAGEMENT</small><h1>系统管理</h1><p>选择要管理的业务系统。</p></div>
+        <div class="system-entry-grid">
+          <button type="button" class="system-entry" data-testid="recruitment-entry" @click="navigateSystem('recruitment')"><small>RECRUITMENT</small><h2>招聘系统</h2><p>管理候选人、有效浏览、招聘岗位与官网设置。</p><span>进入系统 →</span></button>
+          <button type="button" class="system-entry" data-testid="walletcheck-entry" @click="navigateSystem('walletcheck')"><small>WALLETCHECK</small><h2>WalletCheck</h2><p>查看 WalletCheck 的有效访问与地址查询情况。</p><span>进入系统 →</span></button>
+        </div>
+      </section>
+      <section v-else class="admin-main">
+        <nav v-if="activeSystem==='recruitment'" class="admin-modules">
           <button :class="{active:activeModule==='applications'}" @click="switchModule('applications')">候选人管理</button>
           <button :class="{active:activeModule==='visits'}" @click="switchModule('visits')">有效浏览</button>
           <button :class="{active:activeModule==='jobs'}" @click="switchModule('jobs')">岗位管理</button>
           <button :class="{active:activeModule==='templates'}" @click="switchModule('templates')">官网模板</button>
           <button :class="{active:activeModule==='research'}" @click="switchModule('research')">web3钱包产品调研</button>
         </nav>
-        <template v-if="activeModule==='applications'">
+        <template v-if="activeSystem==='recruitment'&&activeModule==='applications'">
           <div class="admin-title"><div><small>APPLICATION PIPELINE</small><h1>候选人投递</h1></div><b>{{String(filteredCount).padStart(2,"0")}}</b></div>
           <div class="admin-toolbar">
             <label class="search-main"><span>⌕</span><input v-model="query" placeholder="姓名、岗位、Telegram 或申请编号" @keyup.enter="searchApplications"/></label>
@@ -363,8 +388,9 @@ onMounted(loadApplications);
           </div>
         </template>
 
-        <template v-else-if="activeModule==='visits'">
-          <div class="admin-title"><div><small>QUALIFIED WEBSITE VISITS</small><h1>有效浏览</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
+        <template v-else-if="activeModule==='visits'||activeSystem==='walletcheck'">
+          <button v-if="activeSystem==='walletcheck'" type="button" class="system-home-action" data-testid="system-home" @click="navigateSystem('home')">← 返回系统管理</button>
+          <div class="admin-title"><div><small>{{activeSystem==='walletcheck'?'WALLETCHECK QUALIFIED VISITS':'QUALIFIED WEBSITE VISITS'}}</small><h1>{{activeSystem==='walletcheck'?'WalletCheck 有效浏览':'有效浏览'}}</h1></div><b>{{String(totalVisits).padStart(2,"0")}}</b></div>
           <p class="visit-description">钱包检测在页面进入时立即开始；访客在页面可见状态下停留满 15 秒后，才将有效浏览与检测到的钱包一起上报后台。</p>
           <div class="admin-toolbar">
             <label><span>有效时长 ≥</span><input v-model.number="visitMinDuration" type="number" min="0" step="1" placeholder="秒" @keyup.enter="searchVisits"/></label>
@@ -375,15 +401,17 @@ onMounted(loadApplications);
           <p v-if="error" class="admin-error">{{error}}</p>
           <p class="admin-scroll-tip">← 左右滑动查看完整访问与设备信息 →</p>
           <div class="admin-table admin-wide-table visit-table">
-            <div class="admin-wide-row admin-row-head visit-row">
+            <div class="admin-wide-row admin-row-head visit-row" :class="{'walletcheck-visit-row':activeSystem==='walletcheck'}">
               <span class="select-action"><input type="checkbox" :checked="allVisitsOnPageSelected" aria-label="选择本页有效浏览" @change="toggleAllVisits"/>操作</span><span>达标时间</span><span>有效停留</span><span>网络 IP</span><span>系统版本</span>
+              <span v-if="activeSystem==='walletcheck'">查询过地址</span>
               <span>设备机型</span><span>设备类型</span><span>浏览器</span><span>检测到的钱包</span><span>进入页面</span>
               <span>最后页面</span><span>最后活跃</span><span>屏幕</span><span>语言</span><span>时区</span><span>User Agent</span>
             </div>
-            <article v-for="visit in visits" :key="visit.id" class="admin-wide-row visit-row">
+            <article v-for="visit in visits" :key="visit.id" class="admin-wide-row visit-row" :class="{'walletcheck-visit-row':activeSystem==='walletcheck'}">
               <span class="select-action"><input v-model="selectedVisitIds" :value="visit.id" type="checkbox" :aria-label="`选择访问记录 ${visit.id}`"/><button class="candidate-delete" type="button" :disabled="loading" @click="deleteVisit(visit)">删除</button></span>
               <span>{{new Date(visit.qualified_at).toLocaleString("zh-CN")}}</span><span><b>{{visitDuration(visit.duration_seconds)}}</b></span>
               <span>{{display(visit.ip_address)}}</span><span>{{display(visit.operating_system)}}</span>
+              <span v-if="activeSystem==='walletcheck'"><b class="visit-boolean" :class="{yes:visit.queried_address}">{{visit.queried_address?'是':'否'}}</b></span>
               <span>{{display(visit.device_model)}}</span><span>{{display(visit.device_type)}}</span>
               <span>{{display(visit.browser_name)}}</span><span class="wallet-list" :title="visit.detected_wallets">{{display(visit.detected_wallets)}}</span><span :title="visit.entry_path">{{display(visit.entry_path)}}</span>
               <span :title="visit.last_path">{{display(visit.last_path)}}</span><span>{{new Date(visit.last_seen_at).toLocaleString("zh-CN")}}</span>
