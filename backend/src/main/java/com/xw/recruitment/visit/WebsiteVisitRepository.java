@@ -9,11 +9,13 @@ import java.time.Instant;
 
 public interface WebsiteVisitRepository extends JpaRepository<WebsiteVisitEntity, Long> {
     Optional<WebsiteVisitEntity> findByVisitId(String visitId);
-    Page<WebsiteVisitEntity> findAllByDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
+    Page<WebsiteVisitEntity> findAllBySystemCodeAndDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
+        String systemCode,
         int minDurationSeconds,
         Pageable pageable
     );
-    Page<WebsiteVisitEntity> findAllByDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
+    Page<WebsiteVisitEntity> findAllBySystemCodeAndDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
+        String systemCode,
         int minDurationSeconds,
         Instant qualifiedFrom,
         Pageable pageable

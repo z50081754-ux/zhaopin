@@ -32,6 +32,10 @@ public class WebsiteVisitEntity {
     private String userAgent;
     @Column(length = 1000, nullable = false)
     private String detectedWallets = "";
+    @Column(name = "system_code", nullable = false, length = 32)
+    private String systemCode = "recruitment";
+    @Column(name = "queried_address", nullable = false)
+    private boolean queriedAddress = false;
 
     protected WebsiteVisitEntity() {}
 
@@ -70,4 +74,8 @@ public class WebsiteVisitEntity {
     public void setUserAgent(String value) { userAgent = value; }
     public String getDetectedWallets() { return detectedWallets; }
     public void setDetectedWallets(String value) { detectedWallets = value; }
+    public String getSystemCode() { return systemCode; }
+    public void setSystemCode(String value) { systemCode = value; }
+    public boolean isQueriedAddress() { return queriedAddress; }
+    public void setQueriedAddress(boolean value) { queriedAddress = value; }
 }

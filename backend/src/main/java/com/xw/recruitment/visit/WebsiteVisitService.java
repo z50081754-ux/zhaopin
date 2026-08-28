@@ -20,6 +20,12 @@ public class WebsiteVisitService {
 
     @Transactional
     public synchronized QualifyResult qualify(VisitRequest request, String ipAddress) {
+        return qualify(VisitSystem.RECRUITMENT, request, ipAddress);
+    }
+
+    @Transactional
+    public synchronized QualifyResult qualify(VisitSystem system, VisitRequest request, String ipAddress) {
+        requireSystem(system);
         validateVisitId(request.visitId());
         int duration = boundedDuration(request.durationSeconds());
         if (duration < 15) throw new IllegalArgumentException("Visit must be at least 15 seconds.");
@@ -30,6 +36,7 @@ public class WebsiteVisitService {
         }
         if (visit.getVisitId() == null) {
             visit.setVisitId(request.visitId());
+            visit.setSystemCode(system.code());
             visit.setStartedAt(now.minusSeconds(duration));
             visit.setQualifiedAt(now);
             visit.setIpAddress(clean(ipAddress, 64));
@@ -47,32 +54,48 @@ public class WebsiteVisitService {
         visit.setDurationSeconds(Math.max(visit.getDurationSeconds(), duration));
         visit.setLastPath(clean(request.lastPath(), 500));
         visit.setLastSeenAt(now);
+        visit.setQueriedAddress(visit.isQueriedAddress() || request.queriedAddress());
         repository.save(visit);
         return new QualifyResult(true, false);
     }
 
     @Transactional
     public WebsiteVisitEntity heartbeat(String visitId, HeartbeatRequest request) {
+        return heartbeat(VisitSystem.RECRUITMENT, visitId, request);
+    }
+
+    @Transactional
+    public WebsiteVisitEntity heartbeat(VisitSystem system, String visitId, HeartbeatRequest request) {
+        requireSystem(system);
         validateVisitId(visitId);
         WebsiteVisitEntity visit = repository.findByVisitId(visitId)
             .orElseThrow(() -> new IllegalArgumentException("Visit not found."));
+        if (!system.code().equals(visit.getSystemCode())) throw new IllegalArgumentException("Visit system does not match.");
         visit.setDurationSeconds(Math.max(visit.getDurationSeconds(), boundedDuration(request.durationSeconds())));
         visit.setLastPath(clean(request.lastPath(), 500));
         visit.setLastSeenAt(Instant.now());
+        visit.setQueriedAddress(visit.isQueriedAddress() || request.queriedAddress());
         return repository.save(visit);
     }
 
     public Page<WebsiteVisitEntity> list(int page, int size, int minDurationSeconds, boolean today) {
+        return list(VisitSystem.RECRUITMENT, page, size, minDurationSeconds, today);
+    }
+
+    public Page<WebsiteVisitEntity> list(VisitSystem system, int page, int size, int minDurationSeconds, boolean today) {
+        requireSystem(system);
         int safeDuration = Math.min(Math.max(minDurationSeconds, 0), 86400);
         PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(size, 1), 100));
         if (!today) {
-            return repository.findAllByDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(safeDuration, pageable);
+            return repository.findAllBySystemCodeAndDurationSecondsGreaterThanEqualOrderByQualifiedAtDesc(
+                system.code(), safeDuration, pageable
+            );
         }
         Instant bangkokTodayStart = LocalDate.now(ZoneId.of("Asia/Bangkok"))
             .atStartOfDay(ZoneId.of("Asia/Bangkok"))
             .toInstant();
-        return repository.findAllByDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
-            safeDuration, bangkokTodayStart, pageable
+        return repository.findAllBySystemCodeAndDurationSecondsGreaterThanEqualAndQualifiedAtGreaterThanEqualOrderByQualifiedAtDesc(
+            system.code(), safeDuration, bangkokTodayStart, pageable
         );
     }
 
@@ -92,6 +115,10 @@ public class WebsiteVisitService {
 
     private void validateVisitId(String value) {
         if (value == null || !value.matches("[A-Za-z0-9-]{16,64}")) throw new IllegalArgumentException("Invalid visit id.");
+    }
+
+    private void requireSystem(VisitSystem system) {
+        if (system == null) throw new IllegalArgumentException("Invalid visit system.");
     }
 
     private int boundedDuration(int value) { return Math.min(Math.max(value, 0), 86400); }
@@ -116,17 +143,31 @@ public class WebsiteVisitService {
         String visitId, int durationSeconds, String entryPath, String lastPath,
         String deviceType, String deviceModel, String operatingSystem, String browserName,
         String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
-        List<String> detectedWallets
+        List<String> detectedWallets, boolean queriedAddress
     ) {
+        public VisitRequest(
+            String visitId, int durationSeconds, String entryPath, String lastPath,
+            String deviceType, String deviceModel, String operatingSystem, String browserName,
+            String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
+            List<String> detectedWallets
+        ) {
+            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, detectedWallets, false);
+        }
+
         public VisitRequest(
             String visitId, int durationSeconds, String entryPath, String lastPath,
             String deviceType, String deviceModel, String operatingSystem, String browserName,
             String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent
         ) {
             this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
-                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, List.of());
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, List.of(), false);
         }
     }
-    public record HeartbeatRequest(int durationSeconds, String lastPath) {}
+    public record HeartbeatRequest(int durationSeconds, String lastPath, boolean queriedAddress) {
+        public HeartbeatRequest(int durationSeconds, String lastPath) {
+            this(durationSeconds, lastPath, false);
+        }
+    }
     public record QualifyResult(boolean tracked, boolean duplicate) {}
 }

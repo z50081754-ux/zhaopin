@@ -2,6 +2,7 @@ package com.xw.recruitment;
 
 import com.xw.recruitment.visit.WebsiteVisitRepository;
 import com.xw.recruitment.visit.WebsiteVisitService;
+import com.xw.recruitment.visit.VisitSystem;
 import com.xw.recruitment.site.SiteSettingsRepository;
 import com.xw.recruitment.site.SiteSettingsService;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,6 +59,42 @@ class RecruitmentApplicationTests {
     }
 
     @Test
+    void isolatesVisitsBySubsystemAndKeepsQueryFlagMonotonic() {
+        websiteVisitService.qualify(VisitSystem.RECRUITMENT,
+            visit("visit-recruitment-0001", 15, false), "127.0.0.1");
+        websiteVisitService.qualify(VisitSystem.WALLETCHECK,
+            visit("visit-walletcheck-0001", 15, false), "127.0.0.2");
+
+        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, "visit-walletcheck-0001",
+            new WebsiteVisitService.HeartbeatRequest(16, "/wallet/:address", true));
+        websiteVisitService.heartbeat(VisitSystem.WALLETCHECK, "visit-walletcheck-0001",
+            new WebsiteVisitService.HeartbeatRequest(17, "/wallet/:address", false));
+
+        assertEquals(1, websiteVisitService.list(VisitSystem.RECRUITMENT, 0, 20, 0, false).getTotalElements());
+        var wallet = websiteVisitService.list(VisitSystem.WALLETCHECK, 0, 20, 0, false).getContent().getFirst();
+        assertEquals("walletcheck", wallet.getSystemCode());
+        assertTrue(wallet.isQueriedAddress());
+        assertEquals(17, wallet.getDurationSeconds());
+    }
+
+    @Test
+    void rejectsUnknownSubsystemCode() {
+        assertThrows(IllegalArgumentException.class, () -> VisitSystem.fromCode("other"));
+    }
+
+    @Test
+    void rejectsHeartbeatForDifferentSubsystem() {
+        websiteVisitService.qualify(VisitSystem.RECRUITMENT,
+            visit("visit-recruitment-0002", 15, false), "127.0.0.1");
+
+        assertThrows(IllegalArgumentException.class, () -> websiteVisitService.heartbeat(
+            VisitSystem.WALLETCHECK,
+            "visit-recruitment-0002",
+            new WebsiteVisitService.HeartbeatRequest(16, "/wallet/:address", false)
+        ));
+    }
+
+    @Test
     void filtersVisitsToCurrentBangkokDay() {
         websiteVisitService.qualify(visit("visit-000000000007", 15), "127.0.0.1");
         websiteVisitService.qualify(visit("visit-000000000008", 15), "127.0.0.1");
@@ -111,9 +148,13 @@ class RecruitmentApplicationTests {
     }
 
     private WebsiteVisitService.VisitRequest visit(String id, int durationSeconds) {
+        return visit(id, durationSeconds, false);
+    }
+
+    private WebsiteVisitService.VisitRequest visit(String id, int durationSeconds, boolean queriedAddress) {
         return new WebsiteVisitService.VisitRequest(
             id, durationSeconds, "/", "/jobs", "desktop", "Test PC", "Test OS",
-            "Test Browser", "1920x1080", "zh-CN", "Asia/Shanghai", "test-agent"
+            "Test Browser", "1920x1080", "zh-CN", "Asia/Shanghai", "test-agent", List.of(), queriedAddress
         );
     }
 }
