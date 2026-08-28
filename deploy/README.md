@@ -18,6 +18,42 @@
 
 后台的环境变量见 `admin/.env.example`。后台和 API 同源部署时，`VITE_API_BASE_URL` 保持为空；若以后分域部署，则填入 API 的 HTTPS 地址，并在 Spring Boot 中放行后台来源域名。
 
+## SakuraPay 调研接入
+
+本地联调时，后端必须按来源逐一放行 SakuraPay 与 TX 管理后台，不能使用通配符：
+
+```bash
+FRONTEND_ORIGINS=http://127.0.0.1:4173,http://127.0.0.1:4174
+```
+
+生产环境将上面的两个值替换为实际的、精确的 HTTPS origin（只包含协议、主机和
+可选端口，不含路径或末尾 `/`），其中必须包含 SakuraPay 的精确 origin。不要用
+`*` 或宽泛的子域匹配代替。若 SakuraPay 由自己的 Nginx 提供，优先把 `/api/`
+反向代理到 TX API，以保持浏览器同源访问：
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+同源反向代理构建 SakuraPay 时将 `VITE_API_BASE_URL` 留空；确需分域时再指定 TX API
+的 HTTPS origin，例如：
+
+```bash
+VITE_API_BASE_URL=https://api.example.com npm run build
+```
+
+分域值也必须对应 `FRONTEND_ORIGINS` 中允许的 SakuraPay/管理后台精确来源。上线前
+由产品负责人和隐私负责人审核活动规则与隐私说明。本发布只提供
+`web3钱包产品调研` 数据收集和授权管理功能，不提供抽取、公布结果、奖励发放、
+钱包转账或任何链上操作。
+
 ## 生产目录更新
 
 ```bash
