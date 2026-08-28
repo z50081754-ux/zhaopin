@@ -58,6 +58,9 @@ public class ResearchSubmissionEntity {
     @Column(name = "request_context_hash", nullable = false, length = 64)
     private String requestContextHash;
 
+    @Column(name = "visit_id", length = 64)
+    private String visitId;
+
     @Column(name = "terms_version", nullable = false, length = 40)
     private String termsVersion;
 
@@ -78,6 +81,14 @@ public class ResearchSubmissionEntity {
             String feedback, String walletCiphertext, String walletNonce, String walletHash,
             String ipHash, String requestContextHash, String termsVersion, Instant consentedAt,
             Instant createdAt, Set<String> scenes) {
+        this(submissionNumber, source, rating, concern, feedback, walletCiphertext, walletNonce,
+            walletHash, ipHash, requestContextHash, termsVersion, consentedAt, createdAt, scenes, null);
+    }
+
+    ResearchSubmissionEntity(String submissionNumber, String source, int rating, String concern,
+            String feedback, String walletCiphertext, String walletNonce, String walletHash,
+            String ipHash, String requestContextHash, String termsVersion, Instant consentedAt,
+            Instant createdAt, Set<String> scenes, String visitId) {
         this.submissionNumber = submissionNumber;
         this.source = source;
         this.rating = rating;
@@ -93,6 +104,7 @@ public class ResearchSubmissionEntity {
         this.consentedAt = consentedAt;
         this.createdAt = createdAt;
         this.scenes = new HashSet<>(scenes);
+        this.visitId = visitId;
     }
 
     public Long getId() { return id; }
@@ -107,6 +119,7 @@ public class ResearchSubmissionEntity {
     public String getWalletHash() { return walletHash; }
     public String getIpHash() { return ipHash; }
     public String getRequestContextHash() { return requestContextHash; }
+    public String getVisitId() { return visitId; }
     public String getTermsVersion() { return termsVersion; }
     public Instant getConsentedAt() { return consentedAt; }
     public Instant getCreatedAt() { return createdAt; }

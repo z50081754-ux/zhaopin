@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface ResearchSubmissionRepository extends JpaRepository<ResearchSubmissionEntity, Long> {
     boolean existsByWalletHash(String walletHash);
+    boolean existsByVisitId(String visitId);
     Optional<ResearchSubmissionEntity> findBySubmissionNumber(String submissionNumber);
     Optional<ResearchSubmissionEntity> findByWalletHash(String walletHash);
 

@@ -138,12 +138,12 @@ class VisitApiIntegrationTest {
     void qualifiesResearchAtFiveSecondsAndKeepsOtherThresholdsAtFifteen() throws Exception {
         mockMvc.perform(post("/api/visits/research")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(researchVisitJson("visit-research-0001", 4, false)))
+                .content(researchVisitJson("visit-research-0001", 4)))
             .andExpect(status().isBadRequest());
 
         mockMvc.perform(post("/api/visits/research")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(researchVisitJson("visit-research-0001", 5, false)))
+                .content(researchVisitJson("visit-research-0001", 5)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.tracked").value(true));
 
@@ -151,22 +151,27 @@ class VisitApiIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(walletVisitJson("visit-wallet-still-15", 5, false)))
             .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/visits")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(walletVisitJson("visit-recruitment-still-15", 5, false)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
-    void researchHeartbeatMakesDurationAndSubmissionMonotonic() throws Exception {
+    void researchHeartbeatKeepsDurationMonotonicAndSanitizesAllPaths() throws Exception {
         mockMvc.perform(post("/api/visits/research")
                 .header("CF-IPCountry", "TH")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(researchVisitJson("visit-research-0002", 5, false)))
+                .content(researchVisitJson("visit-research-0002", 5)))
             .andExpect(status().isOk());
         mockMvc.perform(post("/api/visits/research/visit-research-0002/heartbeat")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"durationSeconds\":25,\"lastPath\":\"/?secret=removed\",\"submittedResearch\":true}"))
+                .content("{\"durationSeconds\":25,\"lastPath\":\"/?secret=removed\"}"))
             .andExpect(status().isOk());
         mockMvc.perform(post("/api/visits/research/visit-research-0002/heartbeat")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"durationSeconds\":10,\"lastPath\":\"/\",\"submittedResearch\":false}"))
+                .content("{\"durationSeconds\":10,\"lastPath\":\"/\"}"))
             .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/admin/visits")
@@ -174,20 +179,21 @@ class VisitApiIntegrationTest {
                 .param("systemCode", "research"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.visits[0].duration_seconds").value(25))
-            .andExpect(jsonPath("$.visits[0].submitted_research").value(true))
+            .andExpect(jsonPath("$.visits[0].submitted_research").value(false))
             .andExpect(jsonPath("$.visits[0].visitor_country").value("TH"))
+            .andExpect(jsonPath("$.visits[0].entry_path").value("/"))
             .andExpect(jsonPath("$.visits[0].last_path").value("/"));
     }
 
-    private String researchVisitJson(String visitId, int durationSeconds, boolean submittedResearch) {
+    private String researchVisitJson(String visitId, int durationSeconds) {
         return """
             {"visitId":"%s","durationSeconds":%d,"entryPath":"/?campaign=private",
              "lastPath":"/","deviceType":"mobile","deviceModel":"iPhone",
              "operatingSystem":"iOS","browserName":"Mobile Safari",
              "screenResolution":"390x844","deviceLanguage":"en-US",
              "deviceTimezone":"Asia/Bangkok","userAgent":"test-agent",
-             "detectedWallets":[],"queriedAddress":false,"submittedResearch":%b}
-            """.formatted(visitId, durationSeconds, submittedResearch);
+             "detectedWallets":[],"queriedAddress":false}
+            """.formatted(visitId, durationSeconds);
     }
 
     private String walletVisitJson(String visitId, int durationSeconds, boolean queriedAddress) {

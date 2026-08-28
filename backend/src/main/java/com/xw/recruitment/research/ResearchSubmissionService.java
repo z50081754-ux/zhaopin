@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.xw.recruitment.visit.WebsiteVisitRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -46,6 +47,7 @@ public class ResearchSubmissionService {
     private final Validator validator;
     private final EntityManager entityManager;
     private final Clock clock;
+    private final WebsiteVisitRepository visits;
     private final boolean enabled;
     private final TronAddressValidator addressValidator = new TronAddressValidator();
 
@@ -53,6 +55,7 @@ public class ResearchSubmissionService {
             ResearchSubmissionRepository submissions, ResearchCryptoService crypto,
             ResearchRateLimiter rateLimiter, Validator validator, EntityManager entityManager,
             Clock clock,
+            WebsiteVisitRepository visits,
             @Value("${xw.research.enabled:false}") boolean enabled) {
         this.campaigns = campaigns;
         this.submissions = submissions;
@@ -61,6 +64,7 @@ public class ResearchSubmissionService {
         this.validator = validator;
         this.entityManager = entityManager;
         this.clock = clock;
+        this.visits = visits;
         this.enabled = enabled;
     }
 
@@ -103,9 +107,12 @@ public class ResearchSubmissionService {
             submissionNumber, normalized.source(), request.rating(), normalized.concern(),
             normalized.feedback(), encrypted.ciphertext(), encrypted.nonce(), walletHash,
             ipHash, crypto.privacyHash(normalizeContext(userAgent)), campaign.getTermsVersion(),
-            now, now, normalized.scenes());
+            now, now, normalized.scenes(), request.visitId());
         try {
             ResearchSubmissionEntity saved = submissions.saveAndFlush(entity);
+            if (saved.getVisitId() != null) {
+                visits.markResearchSubmitted(saved.getVisitId());
+            }
             return new SubmitResult(saved.getSubmissionNumber(),
                 maskWallet(normalized.walletAddress()), saved.getCreatedAt());
         } catch (DataIntegrityViolationException exception) {

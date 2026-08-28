@@ -15,6 +15,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import com.xw.recruitment.visit.VisitSystem;
+import com.xw.recruitment.visit.WebsiteVisitRepository;
+import com.xw.recruitment.visit.WebsiteVisitService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,11 +39,52 @@ class ResearchSubmissionServiceTest {
     @Autowired ResearchSubmissionRepository submissions;
     @Autowired ResearchCryptoService crypto;
     @Autowired JdbcTemplate jdbc;
+    @Autowired WebsiteVisitRepository visits;
+    @Autowired WebsiteVisitService visitService;
 
     @BeforeEach
     void resetCampaignAndSubmissions() {
         submissions.deleteAll();
+        visits.deleteAll();
         jdbc.update("UPDATE research_campaign SET status = 'ACTIVE', terms_version = '2026-08-01' WHERE id = 1");
+    }
+
+    @Test
+    void savedSubmissionMarksAnExistingResearchVisit() {
+        String visitId = "visit-research-post-0001";
+        visitService.qualify(VisitSystem.RESEARCH, visit(visitId), "127.0.0.10");
+
+        service.submit(validRequest(visitId), "127.0.0.11", "submission-agent");
+
+        assertTrue(visits.findByVisitId(visitId).orElseThrow().isSubmittedResearch());
+    }
+
+    @Test
+    void savedSubmissionMarksResearchVisitWhenItQualifiesLater() {
+        String visitId = "visit-research-pre-00001";
+
+        service.submit(validRequest(visitId), "127.0.0.12", "submission-agent");
+        visitService.qualify(VisitSystem.RESEARCH, visit(visitId), "127.0.0.13");
+
+        assertTrue(visits.findByVisitId(visitId).orElseThrow().isSubmittedResearch());
+    }
+
+    @Test
+    void rejectedOrDuplicateSubmissionDoesNotMarkAResearchVisit() {
+        String rejectedVisitId = "visit-research-reject-01";
+        visitService.qualify(VisitSystem.RESEARCH, visit(rejectedVisitId), "127.0.0.14");
+
+        assertThrows(ResearchApiException.class, () -> service.submit(
+            requestWithVisitId(rejectedVisitId, "2026-07-01"), "127.0.0.15", "rejected-agent"));
+        assertFalse(visits.findByVisitId(rejectedVisitId).orElseThrow().isSubmittedResearch());
+
+        service.submit(validRequest(), "127.0.0.16", "first-agent");
+        String duplicateVisitId = "visit-research-duplicate1";
+        visitService.qualify(VisitSystem.RESEARCH, visit(duplicateVisitId), "127.0.0.17");
+
+        assertThrows(ResearchApiException.class, () -> service.submit(
+            validRequest(duplicateVisitId), "127.0.0.18", "duplicate-agent"));
+        assertFalse(visits.findByVisitId(duplicateVisitId).orElseThrow().isSubmittedResearch());
     }
 
     @Test
@@ -175,6 +219,24 @@ class ResearchSubmissionServiceTest {
         return new ResearchSubmissionRequest("OPEN_CARD", 5,
             Set.of("TRAVEL", "SHOPPING"), "SECURITY", "费用需要透明。",
             "TRC20", WALLET, "2026-08-01", true);
+    }
+
+    private ResearchSubmissionRequest validRequest(String visitId) {
+        return new ResearchSubmissionRequest("OPEN_CARD", 5,
+            Set.of("TRAVEL", "SHOPPING"), "SECURITY", "费用需要透明。",
+            "TRC20", WALLET, "2026-08-01", true, visitId);
+    }
+
+    private ResearchSubmissionRequest requestWithVisitId(String visitId, String termsVersion) {
+        return new ResearchSubmissionRequest("OPEN_CARD", 5,
+            Set.of("TRAVEL", "SHOPPING"), "SECURITY", "费用需要透明。",
+            "TRC20", WALLET, termsVersion, true, visitId);
+    }
+
+    private WebsiteVisitService.VisitRequest visit(String visitId) {
+        return new WebsiteVisitService.VisitRequest(
+            visitId, 5, "/?private=entry", "/", "mobile", "Test phone", "Test OS", "Test browser",
+            "390x844", "en-US", "Asia/Bangkok", "visit-test-agent", List.of(), false);
     }
 
     private String submitAfterGate(CountDownLatch ready, CountDownLatch start, String ip)
