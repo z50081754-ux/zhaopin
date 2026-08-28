@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import XwLogo from "../components/XwLogo.vue";
 import ResearchModule from "../components/ResearchModule.vue";
+import ResearchVisitsModule from "../components/ResearchVisitsModule.vue";
 import {
   parseAdminPath,
   parseResearchModule,
@@ -575,10 +576,7 @@ onBeforeUnmount(()=>window.removeEventListener("popstate",syncSystemFromPath));
           </div>
         </template>
 
-        <template v-else-if="activeSystem==='research'&&activeResearchModule==='visits'">
-          <div class="admin-title"><div><small>SAKURAPAY RESEARCH VISITS</small><h1>有效浏览</h1></div><b>—</b></div>
-          <p class="visit-description">SakuraPay 调研有效浏览统计将在下一阶段上线。</p>
-        </template>
+        <ResearchVisitsModule v-else-if="activeSystem==='research'&&activeResearchModule==='visits'" :api-base="API_BASE" @unauthorized="clearAuthenticatedSession(sessionGeneration)" />
         <ResearchModule v-else-if="activeSystem==='research'&&activeResearchModule==='submissions'" :api-base="API_BASE" />
         <template v-else-if="activeSystem==='recruitment'&&activeModule==='jobs'">
           <div class="admin-title"><div><small>JOB MANAGEMENT</small><h1>招聘岗位</h1></div><div class="admin-job-summary"><span>总岗位数 <b>{{totalJobCount}}</b></span><button class="primary-btn admin-create" @click="newJob">＋ 新建岗位</button></div></div>

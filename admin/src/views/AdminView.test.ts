@@ -4,6 +4,13 @@ import AdminView from "./AdminView.vue";
 
 const emptyApplications = { ok: true, applications: [], total: 0, pages: 0 };
 const emptyVisits = { visits: [], total: 0, pages: 0 };
+const emptyVisitSummary = {
+  todayEffective: 0,
+  averageDurationSeconds: 0,
+  maxDurationSeconds: 0,
+  submittedCount: 0,
+  conversionRate: 0
+};
 const emptyResearchCampaign = {
   status: "ACTIVE",
   effectiveStatus: "ACTIVE",
@@ -151,6 +158,7 @@ function mountAdmin(pathname: string, visitBody: object = emptyVisits) {
       : url.includes("/api/admin/research/campaign") ? emptyResearchCampaign
         : url.includes("/api/admin/research/summary") ? emptyResearchSummary
           : url.includes("/api/admin/research/submissions") ? emptyResearchSubmissions
+            : url.includes("/api/admin/visits/summary") ? emptyVisitSummary
       : url.includes("/api/admin/visits") ? visitBody : emptyApplications
   }));
   vi.stubGlobal("fetch", fetch);
@@ -181,7 +189,10 @@ describe("AdminView subsystem shell", () => {
     expect(wrapper.text()).not.toContain("候选人管理");
     expect(wrapper.text()).not.toContain("招聘岗位");
     expect(wrapper.text()).not.toContain("官网模板");
-    expect(fetch.mock.calls.map(([url]) => String(url)).some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
+    const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
+    expect(requestedUrls.some(url => url === "/api/admin/visits/summary?systemCode=research")).toBe(true);
+    expect(requestedUrls.some(url => url.includes("/api/admin/visits?systemCode=research"))).toBe(true);
   });
 
   it("renders research submissions without loading recruitment or WalletCheck data", async () => {
@@ -200,8 +211,8 @@ describe("AdminView subsystem shell", () => {
     const researchNavigation = wrapper.get(".admin-modules");
     expect(researchNavigation.text()).toContain("有效浏览");
     expect(researchNavigation.text()).toContain("调研记录");
-    expect(wrapper.text()).toContain("SakuraPay 调研有效浏览统计将在下一阶段上线。");
-    expect(wrapper.find(".research-module").exists()).toBe(false);
+    expect(wrapper.find(".research-visits-module").exists()).toBe(true);
+    expect(wrapper.text()).toContain("查看 SakuraPay 调研访客的有效停留");
     expect(wrapper.get(".admin-header-actions a").attributes("href")).toBe("https://sakurapay.xw-company.com/");
 
     await researchNavigation.get("button:nth-child(2)").trigger("click");
@@ -212,7 +223,7 @@ describe("AdminView subsystem shell", () => {
     window.history.replaceState({}, "", "/admin/research/visits");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flushPromises();
-    expect(wrapper.text()).toContain("SakuraPay 调研有效浏览统计将在下一阶段上线。");
+    expect(wrapper.find(".research-visits-module").exists()).toBe(true);
     expect(wrapper.find(".research-module").exists()).toBe(false);
 
     window.history.replaceState({}, "", "/admin/research/submissions");
@@ -220,7 +231,9 @@ describe("AdminView subsystem shell", () => {
     await flushPromises();
     expect(wrapper.find(".research-module").exists()).toBe(true);
     const requestedUrls = fetch.mock.calls.map(([url]) => String(url));
-    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings|visits)/.test(url))).toBe(false);
+    expect(requestedUrls.some(url => /\/api\/admin\/(applications|jobs|site-settings)/.test(url))).toBe(false);
+    expect(requestedUrls.some(url => url === "/api/admin/visits/summary?systemCode=research")).toBe(true);
+    expect(requestedUrls.some(url => url.includes("/api/admin/visits?systemCode=research"))).toBe(true);
   });
 
   it("keeps research out of the recruitment navigation", async () => {
