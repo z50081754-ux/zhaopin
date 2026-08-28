@@ -179,7 +179,9 @@ public class WebsiteVisitService {
     }
 
     public Set<String> submittedResearchVisitIds(List<WebsiteVisitEntity> visits) {
-        List<String> visitIds = visits.stream().map(WebsiteVisitEntity::getVisitId).toList();
+        List<String> visitIds = visits.stream()
+            .filter(visit -> VisitSystem.RESEARCH.code().equals(visit.getSystemCode()))
+            .map(WebsiteVisitEntity::getVisitId).toList();
         Set<String> submitted = new HashSet<>(researchSubmissions.findSubmittedVisitIds(visitIds));
         visits.stream().filter(WebsiteVisitEntity::isSubmittedResearch).map(WebsiteVisitEntity::getVisitId).forEach(submitted::add);
         return submitted;
