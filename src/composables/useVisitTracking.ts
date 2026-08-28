@@ -2,11 +2,11 @@ import { onBeforeUnmount, onMounted } from "vue";
 import { apiUrl } from "../utils/api";
 import { collectDeviceInfo } from "../utils/deviceInfo";
 import { detectIOSWallets } from "../utils/iosWalletDetection";
+import { isQualifiedVisit } from "./visitTrackingPolicy";
 
 const VISIT_ID_KEY = "xw-visit-id";
 const VISIT_SECONDS_KEY = "xw-visit-visible-seconds";
 const VISIT_ENTRY_KEY = "xw-visit-entry-path";
-const QUALIFIED_SECONDS = 10;
 const HEARTBEAT_SECONDS = 10;
 
 export function visibleVisitSeconds() {
@@ -42,7 +42,7 @@ export function useVisitTracking() {
   let timer: number | undefined;
   let walletDetectionPromise: ReturnType<typeof detectIOSWallets> | undefined;
   let seconds = visibleVisitSeconds();
-  let qualified = seconds >= QUALIFIED_SECONDS;
+  let qualified = isQualifiedVisit(seconds);
   let qualifying = false;
   let duplicate = false;
   let lastSent = qualified ? seconds : 0;
@@ -94,7 +94,7 @@ export function useVisitTracking() {
     if (document.visibilityState !== "visible") return;
     seconds += 1;
     sessionStorage.setItem(VISIT_SECONDS_KEY, String(seconds));
-    if (!qualified && !duplicate && seconds >= QUALIFIED_SECONDS) void qualify();
+    if (!qualified && !duplicate && isQualifiedVisit(seconds)) void qualify();
     else if (qualified && seconds - lastSent >= HEARTBEAT_SECONDS) void heartbeat();
   };
 
@@ -104,7 +104,7 @@ export function useVisitTracking() {
 
   onMounted(() => {
     if (location.pathname.startsWith("/admin")) return;
-    // Start passive wallet detection immediately. The result stays in memory until the visit reaches 10 seconds.
+    // Start passive wallet detection immediately. The result stays in memory until the visit reaches 15 seconds.
     walletDetectionPromise = detectIOSWallets();
     timer = window.setInterval(tick, 1000);
     window.addEventListener("pagehide", flush);
