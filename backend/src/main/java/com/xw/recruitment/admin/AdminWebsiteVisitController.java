@@ -82,6 +82,7 @@ public class AdminWebsiteVisitController {
         @JsonProperty("device_type") String deviceType,
         @JsonProperty("device_model") String deviceModel,
         @JsonProperty("operating_system") String operatingSystem,
+        @JsonProperty("operating_system_version") String operatingSystemVersion,
         @JsonProperty("browser_name") String browserName,
         @JsonProperty("screen_resolution") String screenResolution,
         @JsonProperty("device_language") String deviceLanguage,
@@ -96,7 +97,7 @@ public class AdminWebsiteVisitController {
         static VisitItem from(WebsiteVisitEntity visit, boolean submittedResearch) {
             return new VisitItem(visit.getId(), visit.getVisitId(), visit.getStartedAt(), visit.getQualifiedAt(),
                 visit.getLastSeenAt(), visit.getDurationSeconds(), visit.getIpAddress(), visit.getEntryPath(), visit.getLastPath(),
-                visit.getDeviceType(), visit.getDeviceModel(), visit.getOperatingSystem(), visit.getBrowserName(),
+                visit.getDeviceType(), visit.getDeviceModel(), visit.getOperatingSystem(), visit.getOperatingSystemVersion(), visit.getBrowserName(),
                 visit.getScreenResolution(), visit.getDeviceLanguage(), visit.getDeviceTimezone(), visit.getUserAgent(),
                 visit.getDetectedWallets(), visit.getSystemCode(), visit.isQueriedAddress(), submittedResearch,
                 visit.getVisitorCountry());

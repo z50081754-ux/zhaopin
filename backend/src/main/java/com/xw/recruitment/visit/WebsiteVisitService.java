@@ -78,6 +78,7 @@ public class WebsiteVisitService {
             visit.setDeviceType(clean(request.deviceType(), 80));
             visit.setDeviceModel(clean(request.deviceModel(), 200));
             visit.setOperatingSystem(clean(request.operatingSystem(), 200));
+            visit.setOperatingSystemVersion(clean(request.operatingSystemVersion(), 100));
             visit.setBrowserName(clean(request.browserName(), 200));
             visit.setScreenResolution(clean(request.screenResolution(), 100));
             visit.setDeviceLanguage(clean(request.deviceLanguage(), 80));
@@ -291,7 +292,7 @@ public class WebsiteVisitService {
 
     public record VisitRequest(
         String visitId, int durationSeconds, String entryPath, String lastPath,
-        String deviceType, String deviceModel, String operatingSystem, String browserName,
+        String deviceType, String deviceModel, String operatingSystem, String operatingSystemVersion, String browserName,
         String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
         List<String> detectedWallets, boolean queriedAddress
     ) {
@@ -299,9 +300,19 @@ public class WebsiteVisitService {
             String visitId, int durationSeconds, String entryPath, String lastPath,
             String deviceType, String deviceModel, String operatingSystem, String browserName,
             String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
+            List<String> detectedWallets, boolean queriedAddress
+        ) {
+            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem, null,
+                browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, detectedWallets, queriedAddress);
+        }
+
+        public VisitRequest(
+            String visitId, int durationSeconds, String entryPath, String lastPath,
+            String deviceType, String deviceModel, String operatingSystem, String browserName,
+            String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent,
             List<String> detectedWallets
         ) {
-            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
+            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem, null,
                 browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, detectedWallets, false);
         }
 
@@ -310,7 +321,7 @@ public class WebsiteVisitService {
             String deviceType, String deviceModel, String operatingSystem, String browserName,
             String screenResolution, String deviceLanguage, String deviceTimezone, String userAgent
         ) {
-            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem,
+            this(visitId, durationSeconds, entryPath, lastPath, deviceType, deviceModel, operatingSystem, null,
                 browserName, screenResolution, deviceLanguage, deviceTimezone, userAgent, List.of(), false);
         }
     }

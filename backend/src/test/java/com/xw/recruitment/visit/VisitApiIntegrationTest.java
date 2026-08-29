@@ -261,7 +261,9 @@ class VisitApiIntegrationTest {
                 .param("submittedResearch", "true"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.total").value(1))
-            .andExpect(jsonPath("$.visits[0].duration_seconds").value(20));
+            .andExpect(jsonPath("$.visits[0].duration_seconds").value(20))
+            .andExpect(jsonPath("$.visits[0].operating_system").value("iOS"))
+            .andExpect(jsonPath("$.visits[0].operating_system_version").value("18.6.2"));
 
         mockMvc.perform(get("/api/admin/visits")
                 .with(user("admin").roles("ADMIN"))
@@ -330,7 +332,7 @@ class VisitApiIntegrationTest {
         return """
             {"visitId":"%s","durationSeconds":%d,"entryPath":"/?campaign=private",
              "lastPath":"/","deviceType":"mobile","deviceModel":"iPhone",
-             "operatingSystem":"iOS","browserName":"Mobile Safari",
+             "operatingSystem":"iOS","operatingSystemVersion":"18.6.2","browserName":"Mobile Safari",
              "screenResolution":"390x844","deviceLanguage":"en-US",
              "deviceTimezone":"Asia/Bangkok","userAgent":"test-agent",
              "detectedWallets":[],"queriedAddress":false}
@@ -357,6 +359,7 @@ class VisitApiIntegrationTest {
               "deviceType":"desktop",
               "deviceModel":"Test PC",
               "operatingSystem":"Test OS",
+              "operatingSystemVersion":"1.0",
               "browserName":"Test Browser",
               "screenResolution":"1920x1080",
               "deviceLanguage":"zh-CN",

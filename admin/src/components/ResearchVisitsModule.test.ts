@@ -22,7 +22,8 @@ const visit = {
   last_path: "/research/complete",
   device_type: "mobile",
   device_model: "iPhone",
-  operating_system: "iOS 18",
+  operating_system: "iOS",
+  operating_system_version: "18.6.2",
   browser_name: "Safari",
   screen_resolution: "1170x2532",
   device_language: "zh-CN",
@@ -71,6 +72,10 @@ describe("ResearchVisitsModule", () => {
     expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("2 分 5 秒");
     expect(wrapper.text()).toContain("mobile · Safari");
     expect(wrapper.text()).toContain("zh-CN");
+    expect(wrapper.findAll("thead th").map(cell => cell.text())).toContain("操作系统");
+    expect(wrapper.findAll("thead th").map(cell => cell.text())).toContain("系统版本");
+    expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("iOS");
+    expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("18.6.2");
     expect(wrapper.text()).not.toContain("iPhone");
     expect(wrapper.text()).toContain("Safari");
     expect(wrapper.text()).toContain("TH · 203.0.113.7");
@@ -356,6 +361,8 @@ describe("ResearchVisitsModule", () => {
     expect(row).toContain("/research");
     expect(row).toContain("mobile · Safari");
     expect(row).toContain("zh-CN");
+    expect(row).toContain("iOS");
+    expect(row).toContain("18.6.2");
     expect(row).not.toContain("iPhone");
     expect(row).toContain("Safari");
     expect(row).toContain("未知 · 203.0.113.7");

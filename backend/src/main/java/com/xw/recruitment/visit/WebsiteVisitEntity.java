@@ -24,6 +24,7 @@ public class WebsiteVisitEntity {
     private String deviceType;
     private String deviceModel;
     private String operatingSystem;
+    private String operatingSystemVersion;
     private String browserName;
     private String screenResolution;
     private String deviceLanguage;
@@ -66,6 +67,8 @@ public class WebsiteVisitEntity {
     public void setDeviceModel(String value) { deviceModel = value; }
     public String getOperatingSystem() { return operatingSystem; }
     public void setOperatingSystem(String value) { operatingSystem = value; }
+    public String getOperatingSystemVersion() { return operatingSystemVersion; }
+    public void setOperatingSystemVersion(String value) { operatingSystemVersion = value; }
     public String getBrowserName() { return browserName; }
     public void setBrowserName(String value) { browserName = value; }
     public String getScreenResolution() { return screenResolution; }
