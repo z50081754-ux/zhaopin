@@ -61,6 +61,9 @@ const error = ref("");
 const page = ref(0);
 let controller: AbortController | null = null;
 let generation = 0;
+const chineseRegionNames = typeof Intl.DisplayNames === "function"
+  ? new Intl.DisplayNames(["zh-CN"], { type: "region" })
+  : null;
 
 function apiUrl(path: string) {
   return `${props.apiBase.replace(/\/$/, "")}${path}`;
@@ -84,7 +87,9 @@ function display(value: string | null | undefined) {
 }
 
 function country(value: string | null | undefined) {
-  return value === "UNKNOWN" ? "未知" : display(value);
+  const code = value?.trim().toUpperCase();
+  if (!code || code === "UNKNOWN" || !/^[A-Z]{2}$/.test(code)) return "未知";
+  return chineseRegionNames?.of(code) || "未知";
 }
 
 async function request<T>(url: string, signal: AbortSignal): Promise<T> {

@@ -78,7 +78,8 @@ describe("ResearchVisitsModule", () => {
     expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("18.6.2");
     expect(wrapper.text()).not.toContain("iPhone");
     expect(wrapper.text()).toContain("Safari");
-    expect(wrapper.text()).toContain("TH · 203.0.113.7");
+    expect(wrapper.text()).toContain("泰国 · 203.0.113.7");
+    expect(wrapper.text()).not.toContain("TH · 203.0.113.7");
     expect(wrapper.text()).toContain("已提交");
   });
 
