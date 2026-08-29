@@ -74,9 +74,10 @@ describe("ResearchVisitsModule", () => {
     expect(wrapper.text()).toContain("zh-CN");
     expect(wrapper.findAll("thead th").map(cell => cell.text())).toContain("操作系统");
     expect(wrapper.findAll("thead th").map(cell => cell.text())).toContain("系统版本");
+    expect(wrapper.findAll("thead th").map(cell => cell.text())).toContain("设备名称");
     expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("iOS");
     expect(wrapper.get("[data-testid='research-visit-row-7']").text()).toContain("18.6.2");
-    expect(wrapper.text()).not.toContain("iPhone");
+    expect(wrapper.text()).toContain("iPhone（具体型号不可识别）");
     expect(wrapper.text()).toContain("Safari");
     expect(wrapper.text()).toContain("泰国 · 203.0.113.7");
     expect(wrapper.text()).not.toContain("TH · 203.0.113.7");
@@ -364,7 +365,7 @@ describe("ResearchVisitsModule", () => {
     expect(row).toContain("zh-CN");
     expect(row).toContain("iOS");
     expect(row).toContain("18.6.2");
-    expect(row).not.toContain("iPhone");
+    expect(row).toContain("iPhone（具体型号不可识别）");
     expect(row).toContain("Safari");
     expect(row).toContain("未知 · 203.0.113.7");
     expect(row).toContain("未提交");
